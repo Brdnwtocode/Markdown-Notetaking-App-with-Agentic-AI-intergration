@@ -2,8 +2,6 @@ import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import fs from "fs";
-import path from "path";
 import { DataType } from "@prisma/client";
 
 const openai = new OpenAI({
@@ -38,6 +36,13 @@ export async function POST(request: NextRequest) {
     if (!audioFile) {
       return NextResponse.json(
         { error: "No audio file provided" },
+        { status: 400 }
+      );
+    }
+
+    if (audioFile.size > 10 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: "Audio file too large (max 10MB)" },
         { status: 400 }
       );
     }
@@ -93,7 +98,7 @@ export async function POST(request: NextRequest) {
 
     // Step 4: Call GPT-4o with tool calling
     const gptResponse = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "user",
@@ -120,21 +125,31 @@ Execute the user's intent by calling the appropriate tool. Do not respond with c
       });
     }
 
-    const toolArgs = JSON.parse(toolCall.function.arguments);
+    let toolArgs: any = null;
     let updatedData: any = null;
 
-    if (toolCall.function.name === "update_note") {
-      updatedData = await executeNoteUpdate(
-        contextId,
-        session.user.id,
-        toolArgs,
-        cursorPosition
-      );
-    } else if (toolCall.function.name === "add_stack_row") {
-      updatedData = await executeStackRowAdd(
-        contextId,
-        session.user.id,
-        toolArgs
+    try {
+      toolArgs = JSON.parse(toolCall.function.arguments);
+
+      if (toolCall.function.name === "update_note") {
+        updatedData = await executeNoteUpdate(
+          contextId,
+          session.user.id,
+          toolArgs,
+          cursorPosition
+        );
+      } else if (toolCall.function.name === "add_stack_row") {
+        updatedData = await executeStackRowAdd(
+          contextId,
+          session.user.id,
+          toolArgs
+        );
+      }
+    } catch (err: any) {
+      console.error("Tool execution failed:", err);
+      return NextResponse.json(
+        { error: "Malformed tool arguments or execution failed" },
+        { status: 400 }
       );
     }
 
@@ -147,7 +162,7 @@ Execute the user's intent by calling the appropriate tool. Do not respond with c
   } catch (error) {
     console.error("Voice processing error:", error);
     return NextResponse.json(
-      { error: "Failed to process voice command", details: String(error) },
+      { error: "Failed to process voice command" },
       { status: 500 }
     );
   }

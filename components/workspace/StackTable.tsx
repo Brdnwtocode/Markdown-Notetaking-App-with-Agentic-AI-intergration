@@ -24,7 +24,12 @@ export default function StackTable({ stack, onRowsChange }: StackTableProps) {
   const addRow = async () => {
     const newData: Record<string, any> = {};
     stack.columns.forEach((col) => {
-      newData[col.id] = "";
+      // Initialize numeric columns with null instead of empty string
+      if (col.type === "INT" || col.type === "FLOAT") {
+        newData[col.id] = null;
+      } else {
+        newData[col.id] = "";
+      }
     });
 
     try {

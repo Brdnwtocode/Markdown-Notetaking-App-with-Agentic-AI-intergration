@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, Trash2 } from "lucide-react";
+import toast from "react-hot-toast";
 
 export interface ColumnDefinition {
   name: string;
@@ -51,6 +52,19 @@ export default function SchemaBuilder({
   };
 
   const isValid = columns.every((col) => col.name.trim() !== "");
+
+  const handleConfirm = () => {
+    // Check for duplicate column names (case-insensitive)
+    const lowerCaseNames = columns.map((col) => col.name.toLowerCase().trim());
+    const uniqueNames = new Set(lowerCaseNames);
+
+    if (uniqueNames.size !== lowerCaseNames.length) {
+      toast.error("Column names must be unique (case-insensitive)");
+      return;
+    }
+
+    onConfirm(columns);
+  };
 
   return (
     <div className="space-y-4 p-4">
@@ -124,7 +138,7 @@ export default function SchemaBuilder({
           Cancel
         </Button>
         <Button
-          onClick={() => onConfirm(columns)}
+          onClick={handleConfirm}
           disabled={!isValid || isLoading}
           className="flex-1"
         >

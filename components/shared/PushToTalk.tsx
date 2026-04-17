@@ -17,6 +17,11 @@ export default function PushToTalk() {
     setRecordingTranscript,
     currentNoteId,
     currentStackId,
+    cursorPosition,
+    setIsVoiceMutating,
+    updateNote,
+    stacks,
+    updateStack,
   } = useWorkspaceStore();
 
   // Handle keyboard spacebar
@@ -97,6 +102,7 @@ export default function PushToTalk() {
     }
 
     setIsProcessing(true);
+    setIsVoiceMutating(true);
 
     try {
       const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
@@ -119,6 +125,7 @@ export default function PushToTalk() {
       formData.append("audio", audioBlob, "audio.webm");
       formData.append("contextType", contextType);
       formData.append("contextId", contextId);
+      formData.append("cursorPosition", cursorPosition.toString());
 
       // Send to voice API
       const res = await axios.post("/api/voice/process", formData, {
@@ -127,7 +134,21 @@ export default function PushToTalk() {
         },
       });
 
-      setRecordingTranscript(res.data.transcript);
+      const { action, updatedData, transcript } = res.data;
+
+      if (action === "update_note" && updatedData) {
+        updateNote(updatedData);
+      } else if (action === "add_stack_row" && updatedData) {
+        const activeStack = stacks.find((s) => s.id === currentStackId);
+        if (activeStack) {
+          updateStack({
+            ...activeStack,
+            rows: [...activeStack.rows, updatedData],
+          });
+        }
+      }
+
+      setRecordingTranscript(transcript);
       toast.success("Voice command processed!");
     } catch (error: any) {
       console.error(error);
@@ -136,6 +157,7 @@ export default function PushToTalk() {
       );
     } finally {
       setIsProcessing(false);
+      setIsVoiceMutating(false);
       audioChunksRef.current = [];
     }
   };

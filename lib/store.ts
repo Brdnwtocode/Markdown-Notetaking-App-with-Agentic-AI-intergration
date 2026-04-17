@@ -60,6 +60,10 @@ interface WorkspaceStore {
   // UI state
   isSaving: boolean;
   setIsSaving: (saving: boolean) => void;
+  cursorPosition: number;
+  setCursorPosition: (pos: number) => void;
+  isVoiceMutating: boolean;
+  setIsVoiceMutating: (is: boolean) => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
@@ -100,4 +104,8 @@ export const useWorkspaceStore = create<WorkspaceStore>((set) => ({
   // UI state
   isSaving: false,
   setIsSaving: (saving) => set({ isSaving: saving }),
+  cursorPosition: 0,
+  setCursorPosition: (pos) => set({ cursorPosition: pos }),
+  isVoiceMutating: false,
+  setIsVoiceMutating: (is) => set({ isVoiceMutating: is }),
 }));

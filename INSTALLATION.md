@@ -1,203 +1,239 @@
-# Complete Installation & Deployment Guide
+# Installation & Setup Guide
 
-## 🎯 Quick Start (5 minutes)
+Welcome to the **Markdown Notetaking App with Agentic AI Integration**! This guide will walk you through setting up the project locally and deploying it to production.
 
-### Step 1: Prerequisites Check
+## 📋 Prerequisites
 
+Before starting, ensure you have the following installed:
+
+- **Node.js** (v18 or higher): [Download from nodejs.org](https://nodejs.org/)
+- **PostgreSQL** (v14 or higher): [Download from postgresql.org](https://www.postgresql.org/download/)
+- **Git**: For version control
+
+Verify installations:
 ```bash
-# Check Node.js installation
-node --version  # Should be v18 or higher
-npm --version
-
-# Check PostgreSQL
-psql --version  # Should be version 14 or higher
+node --version    # Should show v18+
+npm --version     # Should show 8+
+psql --version    # Should show 14+
 ```
 
-If either is missing, install from:
-- Node.js: https://nodejs.org/
-- PostgreSQL: https://www.postgresql.org/download/
+## 🚀 Quick Local Setup (5-10 minutes)
 
-### Step 2: Database Setup
+### 1. Clone and Install
 
 ```bash
-# Create database
-createdb notetaking_app
+# Clone the repository
+git clone <your-repo-url>
+cd Markdown-Notetaking-App-with-Agentic-AI-integration
 
-# Or use pgAdmin/DBeaver GUI if preferred
-```
-
-### Step 3: Environment Configuration
-
-```bash
-# Copy template
-cp .env.local.example .env.local
-
-# Edit .env.local - fill in these values:
-```
-
-Edit `.env.local`:
-
-```env
-# Your PostgreSQL connection
-DATABASE_URL="postgresql://localhost/notetaking_app"
-
-# Generate a secret (on command line):
-# openssl rand -hex 32
-NEXTAUTH_SECRET="<paste-generated-secret>"
-NEXTAUTH_URL="http://localhost:3000"
-
-# Get these from GitHub OAuth app settings
-NEXTAUTH_GITHUB_ID="<your-github-id>"
-NEXTAUTH_GITHUB_SECRET="<your-github-secret>"
-
-# Get these from Google OAuth settings
-NEXTAUTH_GOOGLE_ID="<your-google-id>"
-NEXTAUTH_GOOGLE_SECRET="<your-google-secret>"
-
-# Get from OpenAI API dashboard
-OPENAI_API_KEY="sk-<your-key>"
-```
-
-### Step 4: Install & Run
-
-```bash
 # Install dependencies
 npm install
+```
 
-# Create database schema
-npm run db:push
+### 2. Database Setup
 
-# Start development server
+Choose one of the following database options:
+
+#### Option A: Local PostgreSQL
+```bash
+# Create a local database
+createdb notetaking_app
+```
+
+#### Option B: Neon (Recommended for Development)
+1. Sign up at [neon.tech](https://neon.tech)
+2. Create a new project
+3. Copy the connection string from the dashboard
+
+### 3. Environment Configuration
+
+```bash
+# Copy the environment template
+cp .env.local.example .env.local
+```
+
+Edit `.env.local` with your values:
+
+```env
+# Database Connection
+# For local PostgreSQL:
+DATABASE_URL="postgresql://localhost/notetaking_app"
+# For Neon:
+DATABASE_URL="postgresql://username:password@hostname/database?sslmode=require"
+
+# NextAuth Configuration
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="your-secret-key-here-generate-with-openssl-rand-hex-32"
+
+# OAuth Providers (optional for basic functionality)
+NEXTAUTH_GITHUB_ID="your-github-oauth-app-id"
+NEXTAUTH_GITHUB_SECRET="your-github-oauth-app-secret"
+
+NEXTAUTH_GOOGLE_ID="your-google-oauth-client-id"
+NEXTAUTH_GOOGLE_SECRET="your-google-oauth-client-secret"
+
+# OpenAI API (required for AI features)
+OPENAI_API_KEY="sk-your-openai-api-key"
+```
+
+### 4. Database Migration
+
+```bash
+# Push the schema to your database
+npx prisma db push
+
+# Generate Prisma client
+npx prisma generate
+```
+
+### 5. Start the Application
+
+```bash
+# Start the development server
 npm run dev
 
 # Open http://localhost:3000 in your browser
 ```
 
-## 🔐 OAuth Configuration (Detailed)
+🎉 **You're all set!** The app should now be running locally.
 
-### GitHub OAuth Setup
+## 🔐 OAuth Setup (Optional)
 
-1. **Go to GitHub Settings**
-   - Visit: https://github.com/settings/developers
-   - Click "New OAuth App"
+For full authentication features, set up OAuth providers:
 
-2. **Fill Application Form**
-   - Application name: `Markdown Notetaking App`
-   - Homepage URL: `http://localhost:3000`
-   - Authorization callback URL: `http://localhost:3000/api/auth/callback/github`
+### GitHub OAuth
 
-3. **Copy Credentials**
-   - Copy `Client ID` → `NEXTAUTH_GITHUB_ID`
-   - Click "Generate" for secret → `NEXTAUTH_GITHUB_SECRET`
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Click "New OAuth App"
+3. Fill in:
+   - **Application name**: Markdown Notetaking App
+   - **Homepage URL**: `http://localhost:3000`
+   - **Authorization callback URL**: `http://localhost:3000/api/auth/callback/github`
+4. Copy the Client ID and Client Secret to your `.env.local`
 
-### Google OAuth Setup
+### Google OAuth
 
-1. **Create Google Cloud Project**
-   - Visit: https://console.cloud.google.com/
-   - Click "Create Project"
-
-2. **Enable Google+ API**
-   - Search for "Google+ API"
-   - Click "Enable"
-
-3. **Create OAuth Credentials**
-   - Go to "Credentials"
-   - Click "Create Credentials" → OAuth 2.0 Client IDs
-   - Select "Web application"
-   - Add authorized JavaScript origins: `http://localhost:3000`
-   - Add authorized redirect URIs: `http://localhost:3000/api/auth/callback/google`
-
-4. **Copy Credentials**
-   - Copy `Client ID` → `NEXTAUTH_GOOGLE_ID`
-   - Copy `Client Secret` → `NEXTAUTH_GOOGLE_SECRET`
+1. Visit [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing
+3. Enable the Google+ API
+4. Go to Credentials → Create OAuth 2.0 Client IDs
+5. Set authorized origins: `http://localhost:3000`
+6. Set redirect URIs: `http://localhost:3000/api/auth/callback/google`
+7. Copy the Client ID and Client Secret to your `.env.local`
 
 ## 🚀 Production Deployment
 
 ### Deploy to Vercel
 
-#### 1. Prepare Code
+1. **Prepare Your Code**
+   ```bash
+   git init
+   git add .
+   git commit -m "Initial commit"
+   git remote add origin <your-github-repo>
+   git push -u origin main
+   ```
+
+2. **Connect to Vercel**
+   - Go to [vercel.com](https://vercel.com) and sign in
+   - Click "Import Project" and select your GitHub repo
+   - Vercel will auto-detect Next.js
+
+3. **Configure Environment Variables**
+   - In Vercel dashboard, go to Project Settings → Environment Variables
+   - Add all variables from your `.env.local`
+   - For production database, use a hosted PostgreSQL service
+
+4. **Database for Production**
+   Choose from:
+   - **Neon**: Free tier available, easy setup
+   - **Railway**: Simple deployment
+   - **Render**: Good for PostgreSQL hosting
+   - **Vercel Postgres**: Integrated with Vercel
+
+   Update your `DATABASE_URL` in Vercel environment variables.
+
+5. **Deploy**
+   ```bash
+   # Push to GitHub - Vercel will auto-deploy
+   git push origin main
+   ```
+
+### Alternative: Deploy to Other Platforms
+
+- **Railway**: Connect GitHub repo, auto-deploys
+- **Render**: Manual setup, good for full-stack apps
+- **Netlify**: For static sites, but may need serverless functions
+
+## 🛠️ Troubleshooting
+
+### Common Issues
+
+**"Environment variable not found: DATABASE_URL"**
+- Ensure `.env.local` exists in the root directory
+- For Prisma CLI, you may need a `.env` file instead of `.env.local`
+- Copy `.env.local` to `.env` in the root
+
+**"Cannot find module '@auth/prisma-adapter'"**
+- For NextAuth v5, use: `import { PrismaAdapter } from "next-auth/adapters"`
+- Remove `@auth/prisma-adapter` from package.json if installed
+
+**Database Connection Issues**
+- Verify PostgreSQL is running: `pg_isready`
+- Check connection string format
+- For Neon, ensure SSL parameters are included
+
+**Build Errors**
+- Run `npm run build` locally to debug
+- Check for missing environment variables
+- Ensure all dependencies are installed
+
+### Useful Commands
 
 ```bash
-# Ensure .gitignore is set up
-git init
-git add .
-git commit -m "Initial commit"
-git remote add origin <your-github-repo>
-git push -u origin main
+# Reset database
+npx prisma db push --force-reset
+
+# View database
+npx prisma studio
+
+# Generate types
+npx prisma generate
+
+# Lint code
+npm run lint
 ```
 
-#### 2. Set Up Vercel
-
-- Go to https://vercel.com
-- Click "Import Project"
-- Select your GitHub repository
-- Configure environment variables (same as .env.local)
-
-#### 3. Configure Production Database
-
-Choose one of:
-
-**Option A: Vercel Postgres**
-```bash
-npm i @vercel/postgres
-```
-- In Vercel dashboard, add Postgres
-- Copy connection string to DATABASE_URL
-
-**Option B: Railway.app**
-- Create PostgreSQL database
-- Copy connection string
-- Add to Vercel environment variables
-
-**Option C: Render.com**
-- Create PostgreSQL database
-- Copy connection string
-- Add to Vercel environment variables
-
-#### 4. Deploy
-
-```bash
-# The database will already exist from setup
-# Just run migrations on production
-vercel env pull  # Get production env vars locally
-npm run db:push   # Push schema to production DB
-```
-
-Then push to GitHub, and Vercel will auto-deploy.
-
-## 📦 Project Installation Details
-
-### What Gets Installed
+## 📦 Project Structure
 
 ```
-Dependencies:
-- next: Web framework
-- react: UI library
-- prisma: Database ORM
-- zustand: State management
-- next-auth: Authentication
-- openai: AI APIs
-- tailwindcss: Styling
-- lucide-react: Icons
-
-Dev Dependencies:
-- typescript: Type safety
-- eslint: Code quality
-- @types/*: Type definitions
+├── app/                 # Next.js app directory
+│   ├── api/            # API routes
+│   ├── (marketing)/    # Marketing pages
+│   └── (workspace)/    # Main app pages
+├── components/         # React components
+├── lib/                # Utilities and configurations
+├── prisma/             # Database schema
+└── types/              # TypeScript definitions
 ```
 
-### Key npm Scripts
+## 🔧 Development Scripts
 
-```json
-{
-  "dev": "next dev",                 // Start dev server
-  "build": "next build",             // Build for production
-  "start": "next start",             // Start production server
-  "lint": "next lint",               // Run linter
-  "db:generate": "prisma generate",  // Generate Prisma client
-  "db:migrate": "prisma migrate dev", // Create migrations
-  "db:push": "prisma db push"        // Update schema
-}
+- `npm run dev`: Start development server
+- `npm run build`: Build for production
+- `npm run start`: Start production server
+- `npm run lint`: Run ESLint
+- `npm run db:push`: Update database schema
+- `npm run db:studio`: Open Prisma Studio
+
+## 📚 Additional Resources
+
+- [Next.js Documentation](https://nextjs.org/docs)
+- [Prisma Documentation](https://www.prisma.io/docs)
+- [NextAuth.js Documentation](https://next-auth.js.org)
+- [OpenAI API Documentation](https://platform.openai.com/docs)
+
+If you encounter issues not covered here, please check the project's GitHub issues or create a new one.
 ```
 
 ## 🔧 Troubleshooting Installation

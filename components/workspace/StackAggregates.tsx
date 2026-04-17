@@ -9,14 +9,14 @@ interface StackAggregatesProps {
 
 export default function StackAggregates({ stack }: StackAggregatesProps) {
   const aggregates = useMemo(() => {
-    const result: Record<string, { type: string; value: number | null }> = {};
+    const result: Record<string, { type: string; sum: number; avg: number }> = {};
 
     stack.columns.forEach((col) => {
       if (col.type === "INT" || col.type === "FLOAT") {
         const values = stack.rows
           .map((row) => row.data[col.id])
-          .filter((val) => val !== null && val !== undefined)
-          .map((val) => parseFloat(val));
+          .filter((val) => Number.isFinite(Number(val)))
+          .map((val) => Number(val));
 
         if (values.length > 0) {
           result[col.id] = {
