@@ -31,14 +31,6 @@ export default function Canvas() {
     setShapes([...shapes, newShape]);
   };
 
-  const updateShape = (id: string, updates: Partial<CanvasShape>) => {
-    setShapes(
-      shapes.map((shape) =>
-        shape.id === id ? { ...shape, ...updates } : shape
-      )
-    );
-  };
-
   const deleteShape = (id: string) => {
     setShapes(shapes.filter((shape) => shape.id !== id));
   };

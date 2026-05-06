@@ -8,10 +8,33 @@ import toast from "react-hot-toast";
 
 export interface ColumnDefinition {
   name: string;
-  type: "TEXT" | "INT" | "FLOAT" | "BOOLEAN";
+  type: "TEXT" | "INT" | "FLOAT" | "BOOLEAN" | "DATE" | "SELECT" | "FORMULA" | "RELATION";
 }
 
-const DATA_TYPES = ["TEXT", "INT", "FLOAT", "BOOLEAN"] as const;
+const DATA_TYPES = ["TEXT", "INT", "FLOAT", "BOOLEAN", "DATE", "SELECT", "FORMULA", "RELATION"] as const;
+
+const getTypeLabel = (type: string) => {
+  switch (type) {
+    case "TEXT":
+      return "Text";
+    case "INT":
+      return "Number (integer)";
+    case "FLOAT":
+      return "Number (decimal)";
+    case "BOOLEAN":
+      return "Checkbox";
+    case "DATE":
+      return "Date";
+    case "SELECT":
+      return "Select/Tag";
+    case "FORMULA":
+      return "Formula";
+    case "RELATION":
+      return "Relation/Link";
+    default:
+      return "Text";
+  }
+};
 
 interface SchemaBuilderProps {
   onConfirm: (columns: ColumnDefinition[]) => void;
@@ -85,7 +108,7 @@ export default function SchemaBuilder({
                   placeholder="e.g., Product Name"
                 />
               </div>
-              <div className="w-24">
+              <div className="w-36">
                 <label className="text-xs text-muted-foreground">Type</label>
                 <select
                   value={col.type}
@@ -100,7 +123,7 @@ export default function SchemaBuilder({
                 >
                   {DATA_TYPES.map((type) => (
                     <option key={type} value={type}>
-                      {type}
+                      {getTypeLabel(type)}
                     </option>
                   ))}
                 </select>

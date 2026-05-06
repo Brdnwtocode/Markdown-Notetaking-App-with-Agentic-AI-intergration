@@ -24,17 +24,17 @@ export default function PushToTalk() {
     updateStack,
   } = useWorkspaceStore();
 
-  // Handle keyboard spacebar
+  // Handle keyboard Ctrl + Space
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && !isRecording && !isProcessing) {
+      if (e.code === "Space" && e.ctrlKey && !isRecording && !isProcessing) {
         e.preventDefault();
         startRecording();
       }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space" && isRecording) {
+      if ((e.code === "Space" || e.key === "Control") && isRecording) {
         e.preventDefault();
         stopRecording();
       }
@@ -172,24 +172,24 @@ export default function PushToTalk() {
         onTouchEnd={stopRecording}
         disabled={isProcessing}
         size="icon"
-        className={`h-14 w-14 rounded-full shadow-lg transition-all ${
+        className={`h-14 w-14 rounded-md shadow-lg transition-all ${
           isRecording || isProcessing
             ? "bg-red-500 hover:bg-red-600 scale-110"
             : "bg-primary hover:bg-primary/90"
         }`}
-        title="Hold spacebar or click to record"
+        title="Hold Ctrl + Space or click to record"
       >
         <Mic
-          className={`h-6 w-6 ${
+          className={`h-6 w-6 text-white ${
             isRecording || isProcessing ? "animate-pulse" : ""
           }`}
         />
       </Button>
       {(isRecording || isProcessing) && (
-        <div className="absolute inset-0 rounded-full bg-red-500/20 animate-ping" />
+        <div className="absolute inset-0 rounded-md bg-red-500/20 animate-ping" />
       )}
       {isProcessing && (
-        <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs text-muted-foreground mt-2">
+        <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs text-steel mt-2">
           Processing...
         </div>
       )}

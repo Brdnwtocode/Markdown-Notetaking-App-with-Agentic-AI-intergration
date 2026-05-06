@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Stack, StackColumn } from "@/lib/store";
+import { Stack } from "@/lib/store";
 
 interface StackAggregatesProps {
   stack: Stack;

@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss"
+import { fontFamily } from "tailwindcss/defaultTheme"
 
 const config = {
   darkMode: ["class"],
@@ -17,6 +18,9 @@ const config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["var(--font-sans)", ...fontFamily.sans],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -51,11 +55,34 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Notion semantic tokens
+        "brand-navy": "#0a1530",
+        canvas: "#ffffff",
+        surface: "#f6f5f4",
+        "surface-soft": "#fafaf9",
+        hairline: "#e5e3df",
+        "hairline-soft": "#ede9e4",
+        "hairline-strong": "#c8c4be",
+        "ink-deep": "#000000",
+        ink: "#1a1a1a",
+        charcoal: "#37352f",
+        slate: "#5d5b54",
+        steel: "#787671",
+        stone: "#a4a097",
+        "card-tint-peach": "#ffe8d4",
+        "card-tint-rose": "#fde0ec",
+        "card-tint-mint": "#d9f3e1",
+        "card-tint-lavender": "#e6e0f5",
+        "card-tint-sky": "#dcecfa",
+        "card-tint-yellow": "#fef7d6",
+        "card-tint-yellow-bold": "#f9e79f",
+        "card-tint-cream": "#f8f5e8",
+        "card-tint-gray": "#f0eeec",
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        lg: "12px",
+        md: "8px",
+        sm: "6px",
       },
       keyframes: {
         "accordion-down": {
@@ -79,7 +106,11 @@ const config = {
       },
     },
   },
-  plugins: [require("tailwindcss/plugin")],
+  plugins: [
+    require("tailwindcss/plugin"),
+    require("@tailwindcss/typography"),
+    require("tailwind-scrollbar"),
+  ],
 } satisfies Config
 
 export default config

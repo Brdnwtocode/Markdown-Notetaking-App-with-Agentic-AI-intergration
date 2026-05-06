@@ -12,64 +12,91 @@ body {
 
 @layer base {
   :root {
+    /* Canvas White: #ffffff */
     --background: 0 0% 100%;
-    --foreground: 0 0% 3.6%;
+    /* Ink: #1a1a1a */
+    --foreground: 0 0% 10%;
 
+    /* Canvas White */
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.6%;
+    --card-foreground: 0 0% 10%;
 
+    /* Canvas White */
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.6%;
+    --popover-foreground: 0 0% 10%;
 
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
+    /* Surface: #f6f5f4 */
+    --muted: 30 11% 96%;
+    /* Steel: #787671 */
+    --muted-foreground: 43 5% 45%;
 
-    --accent: 0 0% 9.0%;
+    /* Ink Deep: #000000 */
+    --accent: 0 0% 0%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
+    /* Semantic Error: #e03131 */
+    --destructive: 0 74% 53%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.6%;
+    /* Hairline: #e5e3df */
+    --border: 40 20% 88%;
+    /* Hairline Strong: #c8c4be */
+    --input: 36 9% 76%;
+    /* Primary: #5645d4 */
+    --ring: 247 62% 55%;
 
     --radius: 0.5rem;
 
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary: #5645d4 */
+    --primary: 247 62% 55%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 91.2% 59.8%;
-    --secondary-foreground: 222.2 47.6% 11.2%;
+    /* Surface Soft: #fafaf9 */
+    --secondary: 40 20% 98%;
+    --secondary-foreground: 0 0% 10%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    /* Obsidian Dark Theme Colors */
+    --background: 0 0% 12%;
+    --foreground: 0 0% 88%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 15%;
+    --card-foreground: 0 0% 88%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 16%;
+    --popover-foreground: 0 0% 88%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 0 0% 18%;
+    --muted-foreground: 0 0% 65%;
 
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 47.6% 11.2%;
+    --accent: 0 0% 22%;
+    --accent-foreground: 0 0% 92%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 74% 53%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 0 0% 25%;
+    --input: 0 0% 25%;
+    --ring: 207 90% 64%;
 
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 207 90% 64%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 91.2% 59.8%;
-    --secondary-foreground: 222.2 47.6% 11.2%;
+    --secondary-foreground: 0 0% 96%;
   }
 }
+
+/* Milkdown Syntax Reveal on Hover/Focus */
+.ProseMirror h1:hover::before, .ProseMirror h1:focus-within::before { content: '# '; color: #64748b; font-weight: normal; }
+.ProseMirror h2:hover::before, .ProseMirror h2:focus-within::before { content: '## '; color: #64748b; font-weight: normal; }
+.ProseMirror h3:hover::before, .ProseMirror h3:focus-within::before { content: '### '; color: #64748b; font-weight: normal; }
+.ProseMirror h4:hover::before, .ProseMirror h4:focus-within::before { content: '#### '; color: #64748b; font-weight: normal; }
+.ProseMirror h5:hover::before, .ProseMirror h5:focus-within::before { content: '##### '; color: #64748b; font-weight: normal; }
+.ProseMirror h6:hover::before, .ProseMirror h6:focus-within::before { content: '###### '; color: #64748b; font-weight: normal; }
+.ProseMirror strong:hover::before, .ProseMirror strong:focus-within::before { content: '**'; color: #64748b; font-weight: normal; }
+.ProseMirror strong:hover::after, .ProseMirror strong:focus-within::after { content: '**'; color: #64748b; font-weight: normal; }
+.ProseMirror em:hover::before, .ProseMirror em:focus-within::before { content: '*'; color: #64748b; font-style: normal; }
+.ProseMirror em:hover::after, .ProseMirror em:focus-within::after { content: '*'; color: #64748b; font-style: normal; }
+.ProseMirror code:hover::before, .ProseMirror code:focus-within::before { content: '`'; color: #64748b; font-weight: normal; }
+.ProseMirror code:hover::after, .ProseMirror code:focus-within::after { content: '`'; color: #64748b; font-weight: normal; }

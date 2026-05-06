@@ -2,20 +2,12 @@ import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
-import { DataType } from "@prisma/client";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 export const maxDuration = 60; // Vercel serverless function timeout
-
-interface VoiceProcessRequest {
-  audio: Blob;
-  contextType: "NOTE" | "STACK";
-  contextId: string;
-  cursorPosition?: number;
-}
 
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -170,7 +162,9 @@ Execute the user's intent by calling the appropriate tool. Do not respond with c
 
 async function transcribeAudio(buffer: Buffer, filename: string): Promise<string> {
   try {
-    const file = new File([buffer], filename, { type: "audio/webm" });
+    const file = new File([buffer as unknown as BlobPart], filename, {
+      type: "audio/webm",
+    });
 
     const response = await openai.audio.transcriptions.create({
       file,
@@ -221,7 +215,7 @@ function generateToolSchema(
     const properties: Record<string, any> = {};
     const required: string[] = [];
 
-    resource.columns.forEach((col) => {
+    resource.columns.forEach((col: any) => {
       let schema: any = {};
 
       switch (col.type) {
@@ -325,7 +319,7 @@ async function executeStackRowAdd(
   // Map column names to column IDs
   const mappedData: Record<string, any> = {};
 
-  stack.columns.forEach((col) => {
+  stack.columns.forEach((col: any) => {
     if (args.data[col.name] !== undefined) {
       mappedData[col.id] = args.data[col.name];
     }

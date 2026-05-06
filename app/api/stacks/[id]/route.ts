@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const session = await auth();
@@ -28,7 +28,7 @@ export async function GET(
 }
 
 export async function DELETE(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   const session = await auth();
@@ -69,32 +69,111 @@ export async function PUT(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const name = (body as { name?: unknown } | null)?.name;
-  if (typeof name !== "string" || name.trim().length === 0) {
-    return NextResponse.json({ error: "Invalid name" }, { status: 400 });
-  }
+  const {
+    name,
+    columns,
+    rows,
+  } = body as {
+    name?: string;
+    columns?: Array<{ id?: string; name: string; type: "TEXT" | "INT" | "FLOAT" | "BOOLEAN" }>;
+    rows?: Array<{ id?: string; data: Record<string, any> }>;
+  };
 
-  const updated = await prisma.stack.updateMany({
-    where: {
-      id: params.id,
-      userId: session.user.id,
-    },
-    data: {
-      name: name.trim(),
-    },
+  // Start transaction for bulk update
+  const stack = await prisma.$transaction(async (tx) => {
+    // Update stack name if provided
+    if (name) {
+      await tx.stack.update({
+        where: { id: params.id, userId: session.user.id },
+        data: { name: name.trim() },
+      });
+    }
+
+    // Update columns if provided
+    if (columns) {
+      // Delete existing columns not in new list
+      const existingColumns = await tx.stackColumn.findMany({
+        where: { stackId: params.id },
+      });
+      const newColumnIds = columns.map((c) => c.id).filter((id) => id && !id.startsWith("temp_")) as string[];
+      const columnsToDelete = existingColumns.filter((c) => !newColumnIds.includes(c.id));
+      
+      for (const col of columnsToDelete) {
+        await tx.stackColumn.delete({ where: { id: col.id } });
+      }
+
+      // Upsert new/existing columns
+      for (const col of columns) {
+        if (col.id && !col.id.startsWith("temp_")) {
+          // Update existing column (only if it's not a temp id)
+          try {
+            await tx.stackColumn.update({
+              where: { id: col.id, stackId: params.id },
+              data: { name: col.name, type: col.type },
+            });
+          } catch {
+            // Ignore if not found
+          }
+        } else if (!col.id || col.id.startsWith("temp_")) {
+          // Create new column
+          await tx.stackColumn.create({
+            data: {
+              name: col.name,
+              type: col.type,
+              stackId: params.id,
+            },
+          });
+        }
+      }
+    }
+
+    // Update rows if provided
+    if (rows) {
+      // Delete existing rows not in new list
+      const existingRows = await tx.stackRow.findMany({
+        where: { stackId: params.id },
+      });
+      const newRowIds = rows.map((r) => r.id).filter((id) => id && !id.startsWith("temp_")) as string[];
+      const rowsToDelete = existingRows.filter((r) => !newRowIds.includes(r.id));
+      
+      for (const row of rowsToDelete) {
+        await tx.stackRow.delete({ where: { id: row.id } });
+      }
+
+      // Upsert new/existing rows
+      for (const row of rows) {
+        if (row.id && !row.id.startsWith("temp_")) {
+          // Update existing row (only if it's not a temp id)
+          try {
+            await tx.stackRow.update({
+              where: { id: row.id, stackId: params.id },
+              data: { data: row.data },
+            });
+          } catch {
+            // Ignore if not found
+          }
+        } else if (!row.id || row.id.startsWith("temp_")) {
+          // Create new row
+          await tx.stackRow.create({
+            data: {
+              data: row.data,
+              stackId: params.id,
+            },
+          });
+        }
+      }
+    }
+
+    // Fetch updated stack
+    return tx.stack.findUnique({
+      where: { id: params.id },
+      include: { columns: true, rows: true },
+    });
   });
 
-  if (updated.count === 0) {
+  if (!stack) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-
-  const stack = await prisma.stack.findUnique({
-    where: { id: params.id },
-    include: {
-      columns: true,
-      rows: true,
-    },
-  });
 
   return NextResponse.json(stack);
 }

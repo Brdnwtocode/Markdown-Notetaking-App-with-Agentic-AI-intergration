@@ -1,32 +1,51 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useWorkspaceStore } from "@/lib/store";
-import { Plus, LogOut, FileText, Database } from "lucide-react";
+import { Plus, LogOut, Database, PanelLeftOpen, PanelLeftClose, FileText, Table2, Search, ArrowUpAZ, ArrowDownAZ, Calendar, Filter } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import SchemaBuilder, {
   ColumnDefinition,
 } from "@/components/workspace/SchemaBuilder";
 import axios from "axios";
 import toast from "react-hot-toast";
 
+type SortMethod = "a-z" | "z-a" | "date-new" | "date-old" | "type";
+
 export default function Sidebar() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const [isExplorerOpen, setIsExplorerOpen] = useState(false);
   const [showStackDialog, setShowStackDialog] = useState(false);
   const [creatingStack, setCreatingStack] = useState(false);
   const [stackName, setStackName] = useState("");
-  const { notes, stacks, setNotes, setStacks, currentNoteId, currentStackId } =
-    useWorkspaceStore();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortMethod, setSortMethod] = useState<SortMethod>("a-z");
+  
+  const {
+    notes,
+    stacks,
+    setNotes,
+    setStacks,
+    currentNoteId,
+    currentStackId,
+    optimisticCreateNote,
+  } = useWorkspaceStore();
 
   useEffect(() => {
     fetchNotes();
@@ -39,8 +58,6 @@ export default function Sidebar() {
       setNotes(res.data);
     } catch (error) {
       console.error("Failed to fetch notes", error);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -55,9 +72,11 @@ export default function Sidebar() {
 
   const createNote = async () => {
     try {
-      const res = await axios.post("/api/notes", { title: "Untitled Note" });
-      setNotes([res.data, ...notes]);
-      router.push(`/workspace/notes/${res.data.id}`);
+      const { tempId, promise } = optimisticCreateNote("Untitled Note");
+      router.push(`/workspace/notes/${tempId}`);
+      void promise.then(({ realId }) => {
+        router.replace(`/workspace/notes/${realId}`);
+      });
     } catch (error) {
       toast.error("Failed to create note");
     }
@@ -85,91 +104,190 @@ export default function Sidebar() {
       });
   };
 
+  const filteredAndSortedItems = useMemo(() => {
+    // Combine notes and stacks
+    const allItems = [
+      ...notes.map((note) => ({
+        id: note.id,
+        type: "NOTE" as const,
+        title: note.title || "Untitled Note",
+        href: `/workspace/notes/${note.id}`,
+        isActive: currentNoteId === note.id,
+        createdAt: note.createdAt,
+      })),
+      ...stacks.map((stack) => ({
+        id: stack.id,
+        type: "STACK" as const,
+        title: stack.name,
+        href: `/workspace/stacks/${stack.id}`,
+        isActive: currentStackId === stack.id,
+        createdAt: stack.createdAt,
+      })),
+    ];
+
+    // Filter
+    const filtered = allItems.filter((item) =>
+      item.title.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    // Sort
+    const sorted = [...filtered].sort((a, b) => {
+      switch (sortMethod) {
+        case "a-z":
+          return a.title.localeCompare(b.title);
+        case "z-a":
+          return b.title.localeCompare(a.title);
+        case "date-new":
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case "date-old":
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case "type":
+          if (a.type !== b.type) {
+            return a.type === "NOTE" ? -1 : 1;
+          }
+          return a.title.localeCompare(b.title);
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [notes, stacks, searchQuery, sortMethod, currentNoteId, currentStackId]);
+
+  const getSortIcon = () => {
+    switch (sortMethod) {
+      case "a-z":
+        return <ArrowUpAZ className="h-4 w-4" />;
+      case "z-a":
+        return <ArrowDownAZ className="h-4 w-4" />;
+      case "date-new":
+      case "date-old":
+        return <Calendar className="h-4 w-4" />;
+      case "type":
+        return <Filter className="h-4 w-4" />;
+      default:
+        return <ArrowUpAZ className="h-4 w-4" />;
+    }
+  };
+
   return (
-    <div className="w-64 border-r border-border bg-background flex flex-col h-screen">
-      {/* Header */}
-      <div className="p-4 border-b border-border">
-        <h2 className="text-xl font-bold">Your Workspace</h2>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-4 space-y-6">
-        {/* Notes Section */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-              <FileText className="h-4 w-4" /> Notes
-            </h3>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={createNote}
-              className="h-6 w-6"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="space-y-1">
-            {notes.map((note) => (
-              <Link
-                key={note.id}
-                href={`/workspace/notes/${note.id}`}
-                className={`block px-2 py-2 text-sm rounded transition-colors truncate ${
-                  currentNoteId === note.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-foreground hover:bg-accent"
-                }`}
-              >
-                {note.title || "Untitled"}
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* Stacks Section */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-              <Database className="h-4 w-4" /> Stacks
-            </h3>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setShowStackDialog(true)}
-              className="h-6 w-6"
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="space-y-1">
-            {stacks.map((stack) => (
-              <Link
-                key={stack.id}
-                href={`/workspace/stacks/${stack.id}`}
-                className={`block px-2 py-2 text-sm rounded transition-colors truncate ${
-                  currentStackId === stack.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-foreground hover:bg-accent"
-                }`}
-              >
-                {stack.name}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Footer - Logout */}
-      <div className="p-4 border-t border-border">
+    <div className="flex h-screen">
+      {/* Level 1: Ribbon - Actionable Buttons */}
+      <div className="w-12 bg-[#1e1e1e] border-r border-zinc-700/30 flex flex-col items-center py-4 space-y-2">
         <Button
-          onClick={() => signOut({ redirectTo: "/" })}
-          variant="outline"
-          className="w-full"
-          size="sm"
+          size="icon"
+          variant="ghost"
+          onClick={() => setIsExplorerOpen(!isExplorerOpen)}
+          className="h-10 w-10 rounded hover:bg-white/5"
+          title={isExplorerOpen ? "Close Explorer" : "Open Explorer"}
         >
-          <LogOut className="h-4 w-4 mr-2" /> Sign Out
+          {isExplorerOpen ? <PanelLeftClose className="h-5 w-5 text-slate-400" /> : <PanelLeftOpen className="h-5 w-5 text-slate-400" />}
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={createNote}
+          className="h-10 w-10 rounded hover:bg-white/5"
+          title="New Note"
+        >
+          <Plus className="h-5 w-5 text-slate-400" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => setShowStackDialog(true)}
+          className="h-10 w-10 rounded hover:bg-white/5"
+          title="New Stack"
+        >
+          <Database className="h-5 w-5 text-slate-400" />
+        </Button>
+        <div className="flex-1" />
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => signOut({ redirectTo: "/" })}
+          className="h-10 w-10 rounded hover:bg-white/5"
+          title="Sign Out"
+        >
+          <LogOut className="h-5 w-5 text-slate-400" />
         </Button>
       </div>
+
+      {/* Level 2: Unified Explorer */}
+      {isExplorerOpen && (
+        <div className="w-72 bg-[#262626] border-r border-zinc-700/30 flex flex-col">
+          <div className="p-3 border-b border-zinc-700/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-semibold tracking-tight text-slate-400 uppercase">Files</h2>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-white/5">
+                    {getSortIcon()}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setSortMethod("a-z")}>
+                    <ArrowUpAZ className="h-4 w-4 mr-2" />
+                    A - Z
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortMethod("z-a")}>
+                    <ArrowDownAZ className="h-4 w-4 mr-2" />
+                    Z - A
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortMethod("date-new")}>
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Newest First
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortMethod("date-old")}>
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Oldest First
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortMethod("type")}>
+                    <Filter className="h-4 w-4 mr-2" />
+                    By Type
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <Input
+                type="text"
+                placeholder="Search files..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 h-8 bg-zinc-800/50 border-zinc-700 text-sm focus-visible:ring-0"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-auto p-2 space-y-0.5">
+            {filteredAndSortedItems.map((item) => (
+              <Link
+                key={item.id}
+                href={item.href}
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm transition-colors duration-75 truncate ${
+                  item.isActive
+                    ? "bg-white/5 text-slate-200"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                }`}
+              >
+                {item.type === "NOTE" ? (
+                  <FileText className="h-4 w-4 flex-shrink-0" />
+                ) : (
+                  <Table2 className="h-4 w-4 flex-shrink-0" />
+                )}
+                <span className="truncate">{item.title}</span>
+              </Link>
+            ))}
+            {filteredAndSortedItems.length === 0 && (
+              <div className="px-3 py-4 text-sm text-slate-500 text-center">
+                {searchQuery ? "No files found" : "No files yet"}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Stack Creation Dialog */}
       <Dialog open={showStackDialog} onOpenChange={setShowStackDialog}>
@@ -185,7 +303,7 @@ export default function Sidebar() {
                 value={stackName}
                 onChange={(e) => setStackName(e.target.value)}
                 placeholder="e.g., Product Inventory"
-                className="w-full mt-1 px-3 py-2 border border-input rounded text-sm"
+                className="w-full mt-1 px-3 py-2 border border-white/10 rounded text-sm bg-slate-950 text-white"
               />
             </div>
             <SchemaBuilder

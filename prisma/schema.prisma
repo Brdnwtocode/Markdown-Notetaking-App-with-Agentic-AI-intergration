@@ -55,15 +55,17 @@ enum DataType {
   INT
   FLOAT
   BOOLEAN
+  DATE
+  SELECT
 }
 
 model StackColumn {
-  id      String @id @default(uuid())
+  id      String   @id @default(uuid())
   stackId String
-  stack   Stack  @relation(fields: [stackId], references: [id], onDelete: Cascade)
+  stack   Stack    @relation(fields: [stackId], references: [id], onDelete: Cascade)
 
   name String
-  type DataType
+  type DataType?
 }
 
 model StackRow {
