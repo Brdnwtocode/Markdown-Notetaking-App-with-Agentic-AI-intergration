@@ -22,6 +22,9 @@ export default function PushToTalk() {
     updateNote,
     stacks,
     updateStack,
+    noteCache,
+    setPendingAction,
+    setAiReply,
   } = useWorkspaceStore();
 
   // Handle keyboard Ctrl + Space
@@ -127,6 +130,17 @@ export default function PushToTalk() {
       formData.append("contextId", contextId);
       formData.append("cursorPosition", cursorPosition.toString());
 
+      // Add STT/LLM Context payload
+      if (contextType === "NOTE" && currentNoteId) {
+        const noteState = noteCache[currentNoteId]?.content || "";
+        formData.append("note_state", noteState);
+      } else if (contextType === "STACK" && currentStackId) {
+        const activeStack = stacks.find((s) => s.id === currentStackId);
+        if (activeStack) {
+          formData.append("dynamic_schema", JSON.stringify(activeStack.columns));
+        }
+      }
+
       // Send to voice API
       const res = await axios.post("/api/voice/process", formData, {
         headers: {
@@ -134,18 +148,25 @@ export default function PushToTalk() {
         },
       });
 
-      const { action, updatedData, transcript } = res.data;
+      const { action, updatedData, transcript, aiReply } = res.data;
 
-      if (action === "update_note" && updatedData) {
-        updateNote(updatedData);
-      } else if (action === "add_stack_row" && updatedData) {
-        const activeStack = stacks.find((s) => s.id === currentStackId);
-        if (activeStack) {
-          updateStack({
-            ...activeStack,
-            rows: [...activeStack.rows, updatedData],
-          });
-        }
+      // Instead of mutating the store, set the pending action for the confirmation gate
+      if (action === "update_note" && updatedData && currentNoteId) {
+        setPendingAction({
+          type: "update_note",
+          noteId: currentNoteId,
+          updatedData,
+        });
+      } else if (action === "add_stack_row" && updatedData && currentStackId) {
+        setPendingAction({
+          type: "add_stack_row",
+          stackId: currentStackId,
+          data: updatedData,
+        });
+      }
+
+      if (aiReply) {
+        setAiReply(aiReply);
       }
 
       setRecordingTranscript(transcript);

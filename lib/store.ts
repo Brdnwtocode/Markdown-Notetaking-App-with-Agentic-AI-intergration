@@ -46,6 +46,10 @@ export type PendingAction = {
   type: "add_stack_row";
   stackId: string;
   data: Record<string, any>;
+} | {
+  type: "update_note";
+  noteId: string;
+  updatedData: { content: string; title?: string; id: string };
 } | null;
 
 interface WorkspaceStore {
@@ -618,9 +622,14 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   pendingAction: null,
   setPendingAction: (action) => set({ pendingAction: action }),
   commitPendingAction: () => {
-    const { pendingAction, optimisticAddStackRow } = get();
+    const { pendingAction, optimisticAddStackRow, optimisticPatchNote } = get();
     if (pendingAction?.type === "add_stack_row") {
       optimisticAddStackRow(pendingAction.stackId, pendingAction.data);
+    } else if (pendingAction?.type === "update_note") {
+      optimisticPatchNote(pendingAction.noteId, {
+        content: pendingAction.updatedData.content,
+        title: pendingAction.updatedData.title,
+      });
     }
     set({ pendingAction: null, aiReply: null });
   },

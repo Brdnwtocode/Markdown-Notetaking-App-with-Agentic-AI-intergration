@@ -32,6 +32,7 @@
     "axios": "^1.6.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
+    "diff": "^9.0.0",
     "lucide-react": "^0.294.0",
     "next": "^14.0.0",
     "next-auth": "^5.0.0-beta.31",
@@ -43,6 +44,7 @@
     "react-hook-form": "^7.48.0",
     "react-hot-toast": "^2.4.0",
     "react-markdown": "^9.0.0",
+    "react-media-recorder": "^1.7.2",
     "react-resizable-panels": "^0.0.55",
     "react-textarea-autosize": "^8.5.9",
     "reactflow": "^11.10.0",
@@ -55,6 +57,7 @@
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",
+    "@types/diff": "^7.0.2",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
