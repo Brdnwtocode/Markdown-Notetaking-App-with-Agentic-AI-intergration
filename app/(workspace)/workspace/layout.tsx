@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Sidebar from "@/components/workspace/Sidebar";
 import TabBar from "@/components/workspace/TabBar";
 import PushToTalk from "@/components/shared/PushToTalk";
+import AISidebar from "@/components/workspace/AISidebar";
 
 export default async function WorkspaceLayout({
   children,
@@ -27,6 +28,7 @@ export default async function WorkspaceLayout({
         </main>
         <PushToTalk />
       </div>
+      <AISidebar />
     </div>
   );
 }

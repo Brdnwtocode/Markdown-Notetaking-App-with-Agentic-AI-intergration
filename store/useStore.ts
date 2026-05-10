@@ -7,5 +7,7 @@ export {
   type OpenTab,
   type TabType,
   type SyncState,
+  type PendingAction,
+  type PendingActionType,
 } from "../lib/store";
 

@@ -95,8 +95,25 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
   const resizeColumnIdRef = useRef<string | null>(null);
   const resizeStartWidthRef = useRef(0);
   
-  const { notes } = useWorkspaceStore();
+  const { notes, pendingAction, commitPendingAction, clearPendingAction } = useWorkspaceStore();
   const router = useRouter();
+
+  // Handle keyboard events for AI confirmation gate
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (pendingAction?.type === "add_stack_row" && pendingAction.stackId === stackId) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commitPendingAction();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          clearPendingAction();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pendingAction, stackId, commitPendingAction, clearPendingAction]);
 
   // Mark as dirty when any changes happen
   useEffect(() => {
@@ -891,6 +908,53 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                 ))}
               </React.Fragment>
             ))}
+            
+            {/* AI Confirmation Gate Row */}
+            {pendingAction?.type === "add_stack_row" && pendingAction.stackId === stackId && (
+              <tr className="bg-yellow-900/30 border-y border-yellow-700/50 group relative">
+                {columns.map((col, index) => (
+                  <td
+                    key={`pending-${col.id}`}
+                    className={`px-3 py-1.5 relative ${
+                      showGridLines ? "border-r border-yellow-700/30" : ""
+                    }`}
+                    style={{ width: columnWidths[col.id] || 180 }}
+                  >
+                    {index === 0 && (
+                      <div className="absolute -top-10 left-4 bg-zinc-900 border border-yellow-700/50 shadow-lg rounded-md px-3 py-1.5 flex items-center gap-3 z-20 whitespace-nowrap">
+                        <span className="text-xs font-medium text-yellow-500 flex items-center gap-1.5">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
+                          </span>
+                          AI Suggested
+                        </span>
+                        <div className="w-px h-4 bg-zinc-700"></div>
+                        <button onClick={commitPendingAction} className="text-xs text-slate-300 hover:text-white flex items-center gap-1">
+                          Accept <span className="bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded text-[10px] text-slate-400 font-mono">↵ Enter</span>
+                        </button>
+                        <button onClick={clearPendingAction} className="text-xs text-slate-300 hover:text-white flex items-center gap-1">
+                          Discard <span className="bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded text-[10px] text-slate-400 font-mono">Esc</span>
+                        </button>
+                      </div>
+                    )}
+                    <div className="w-full text-sm text-yellow-100/90 px-1 py-0.5 cursor-not-allowed">
+                      {col.type === "BOOLEAN" ? (
+                        <input
+                          type="checkbox"
+                          checked={!!pendingAction.data[col.id]}
+                          readOnly
+                          className="rounded h-4 w-4 opacity-70"
+                        />
+                      ) : (
+                        String(pendingAction.data[col.id] ?? "")
+                      )}
+                    </div>
+                  </td>
+                ))}
+                <td className="px-3 py-1.5"></td>
+              </tr>
+            )}
           </tbody>
         </table>
 

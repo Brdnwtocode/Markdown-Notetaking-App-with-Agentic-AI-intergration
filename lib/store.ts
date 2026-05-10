@@ -42,6 +42,12 @@ export interface OpenTab {
 
 export type SyncState = "SAVED" | "SAVING" | "ERROR";
 
+export type PendingAction = {
+  type: "add_stack_row";
+  stackId: string;
+  data: Record<string, any>;
+} | null;
+
 interface WorkspaceStore {
   // Tabs
   openTabs: OpenTab[];
@@ -112,6 +118,14 @@ interface WorkspaceStore {
   isRawMarkdownView: boolean;
   setIsRawMarkdownView: (isRaw: boolean) => void;
   toggleRawMarkdownView: () => void;
+
+  // AI Conversational UI
+  aiReply: string | null;
+  setAiReply: (reply: string | null) => void;
+  pendingAction: PendingAction;
+  setPendingAction: (action: PendingAction) => void;
+  commitPendingAction: () => void;
+  clearPendingAction: () => void;
 }
 
 function tempId(prefix: string) {
@@ -597,4 +611,18 @@ export const useWorkspaceStore = create<WorkspaceStore>((set, get) => ({
   isRawMarkdownView: false,
   setIsRawMarkdownView: (is) => set({ isRawMarkdownView: is }),
   toggleRawMarkdownView: () => set((state) => ({ isRawMarkdownView: !state.isRawMarkdownView })),
+
+  // AI Conversational UI
+  aiReply: null,
+  setAiReply: (reply) => set({ aiReply: reply }),
+  pendingAction: null,
+  setPendingAction: (action) => set({ pendingAction: action }),
+  commitPendingAction: () => {
+    const { pendingAction, optimisticAddStackRow } = get();
+    if (pendingAction?.type === "add_stack_row") {
+      optimisticAddStackRow(pendingAction.stackId, pendingAction.data);
+    }
+    set({ pendingAction: null, aiReply: null });
+  },
+  clearPendingAction: () => set({ pendingAction: null }),
 }));

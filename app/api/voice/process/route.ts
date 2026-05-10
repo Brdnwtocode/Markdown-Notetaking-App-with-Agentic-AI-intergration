@@ -1,14 +1,14 @@
 import { auth } from "@/app/auth";
-import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export const maxDuration = 60; // Vercel serverless function timeout
 
+/**
+ * Backend-For-Frontend (BFF) Proxy for Voice Processing
+ * 
+ * This route acts as a proxy to the FastAPI microservice.
+ * It translates camelCase fields to snake_case before forwarding.
+ */
 export async function POST(request: NextRequest) {
   const session = await auth();
 
@@ -19,11 +19,11 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const audioFile = formData.get("audio") as File;
-    const contextType = formData.get("contextType") as "NOTE" | "STACK";
+    const contextType = formData.get("contextType") as string;
     const contextId = formData.get("contextId") as string;
-    const cursorPosition = formData.get("cursorPosition")
-      ? parseInt(formData.get("cursorPosition") as string)
-      : 0;
+    const cursorPosition = formData.get("cursorPosition") as string;
+    const noteState = formData.get("note_state") as string;
+    const dynamicSchema = formData.get("dynamic_schema") as string;
 
     if (!audioFile) {
       return NextResponse.json(
@@ -39,298 +39,52 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert File to Buffer for OpenAI
-    const buffer = Buffer.from(await audioFile.arrayBuffer());
-
-    // Step 1: Transcribe with Whisper
-    const transcript = await transcribeAudio(buffer, audioFile.name);
-
-    // Step 2: Fetch context data
-    let contextData: any = null;
-    let resource: any = null;
-
-    if (contextType === "NOTE") {
-      resource = await prisma.note.findUnique({
-        where: { id: contextId },
-      });
-
-      if (!resource || resource.userId !== session.user.id) {
-        return NextResponse.json(
-          { error: "Note not found" },
-          { status: 404 }
-        );
-      }
-
-      contextData = resource.content;
-    } else if (contextType === "STACK") {
-      resource = await prisma.stack.findUnique({
-        where: { id: contextId },
-        include: {
-          columns: true,
-          rows: true,
-        },
-      });
-
-      if (!resource || resource.userId !== session.user.id) {
-        return NextResponse.json(
-          { error: "Stack not found" },
-          { status: 404 }
-        );
-      }
-
-      contextData = {
-        name: resource.name,
-        columns: resource.columns,
-        rowCount: resource.rows.length,
-      };
+    // Build FormData with snake_case keys for FastAPI
+    const fastApiFormData = new FormData();
+    fastApiFormData.append("audio", audioFile);
+    fastApiFormData.append("context_type", contextType);
+    fastApiFormData.append("context_id", contextId);
+    
+    if (cursorPosition) {
+      fastApiFormData.append("cursor_position", cursorPosition);
+    }
+    if (noteState) {
+      fastApiFormData.append("note_state", noteState);
+    }
+    if (dynamicSchema) {
+      fastApiFormData.append("dynamic_schema", dynamicSchema);
     }
 
-    // Step 3: Generate tool schema based on context
-    const tools = generateToolSchema(contextType, resource);
+    // Add user ID for backend validation
+    fastApiFormData.append("user_id", session.user.id);
 
-    // Step 4: Call GPT-4o with tool calling
-    const gptResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "user",
-          content: `You are the AI engine for a multimodal workspace. The user is dictating commands in Vietnamese or English.
-Current context type: ${contextType}.
-Current state: ${JSON.stringify(contextData)}.
-User's command (transcribed): "${transcript}"
+    const fastApiUrl = process.env.FASTAPI_URL || "http://127.0.0.1:8000";
 
-Execute the user's intent by calling the appropriate tool. Do not respond with conversational text.`,
-        },
-      ],
-      tools,
-      tool_choice: "auto",
-    });
-
-    // Step 5: Extract tool call and execute
-    const toolCall = gptResponse.choices[0].message.tool_calls?.[0];
-
-    if (!toolCall) {
-      return NextResponse.json({
-        transcript,
-        action: "none",
-        message: "No action recognized from command",
-      });
-    }
-
-    let toolArgs: any = null;
-    let updatedData: any = null;
-
-    try {
-      toolArgs = JSON.parse(toolCall.function.arguments);
-
-      if (toolCall.function.name === "update_note") {
-        updatedData = await executeNoteUpdate(
-          contextId,
-          session.user.id,
-          toolArgs,
-          cursorPosition
-        );
-      } else if (toolCall.function.name === "add_stack_row") {
-        updatedData = await executeStackRowAdd(
-          contextId,
-          session.user.id,
-          toolArgs
-        );
+    // Forward to FastAPI microservice
+    const fastApiResponse = await fetch(
+      `${fastApiUrl}/api/v1/voice/process`,
+      {
+        method: "POST",
+        body: fastApiFormData,
       }
-    } catch (err: any) {
-      console.error("Tool execution failed:", err);
+    );
+
+    if (!fastApiResponse.ok) {
+      const errorText = await fastApiResponse.text();
+      console.error("FastAPI error:", fastApiResponse.status, errorText);
       return NextResponse.json(
-        { error: "Malformed tool arguments or execution failed" },
-        { status: 400 }
+        { error: "Voice processing failed" },
+        { status: fastApiResponse.status }
       );
     }
 
-    return NextResponse.json({
-      transcript,
-      action: toolCall.function.name,
-      updatedData,
-      success: true,
-    });
+    const responseData = await fastApiResponse.json();
+    return NextResponse.json(responseData);
   } catch (error) {
-    console.error("Voice processing error:", error);
+    console.error("Voice proxy error:", error);
     return NextResponse.json(
       { error: "Failed to process voice command" },
       { status: 500 }
     );
   }
-}
-
-async function transcribeAudio(buffer: Buffer, filename: string): Promise<string> {
-  try {
-    const file = new File([buffer as unknown as BlobPart], filename, {
-      type: "audio/webm",
-    });
-
-    const response = await openai.audio.transcriptions.create({
-      file,
-      model: "whisper-1",
-      language: "vi", // Vietnamese
-    });
-
-    return response.text;
-  } catch (error) {
-    console.error("Whisper transcription error:", error);
-    throw new Error("Failed to transcribe audio");
-  }
-}
-
-function generateToolSchema(
-  contextType: string,
-  resource: any
-): OpenAI.Chat.ChatCompletionTool[] {
-  if (contextType === "NOTE") {
-    return [
-      {
-        type: "function",
-        function: {
-          name: "update_note",
-          description: "Inserts or modifies Markdown text in the current note.",
-          parameters: {
-            type: "object",
-            properties: {
-              content_to_insert: {
-                type: "string",
-                description:
-                  "The Markdown formatted string to insert or replace based on user command.",
-              },
-              action_type: {
-                type: "string",
-                enum: ["append", "insert_at_cursor", "replace_all"],
-                description:
-                  "append: add to end, insert_at_cursor: insert at cursor, replace_all: replace entire content",
-              },
-            },
-            required: ["content_to_insert", "action_type"],
-          },
-        },
-      },
-    ];
-  } else if (contextType === "STACK") {
-    // Dynamically generate schema based on stack columns
-    const properties: Record<string, any> = {};
-    const required: string[] = [];
-
-    resource.columns.forEach((col: any) => {
-      let schema: any = {};
-
-      switch (col.type) {
-        case "INT":
-          schema = { type: "integer" };
-          break;
-        case "FLOAT":
-          schema = { type: "number" };
-          break;
-        case "BOOLEAN":
-          schema = { type: "boolean" };
-          break;
-        case "TEXT":
-        default:
-          schema = { type: "string" };
-          break;
-      }
-
-      properties[col.name] = schema;
-      required.push(col.name);
-    });
-
-    return [
-      {
-        type: "function",
-        function: {
-          name: "add_stack_row",
-          description: "Adds a new row of structured data to the current Stack table.",
-          parameters: {
-            type: "object",
-            properties: {
-              data: {
-                type: "object",
-                properties,
-                required,
-              },
-            },
-            required: ["data"],
-          },
-        },
-      },
-    ];
-  }
-
-  return [];
-}
-
-async function executeNoteUpdate(
-  noteId: string,
-  userId: string,
-  args: any,
-  cursorPosition: number
-): Promise<any> {
-  const note = await prisma.note.findUnique({
-    where: { id: noteId },
-  });
-
-  if (!note || note.userId !== userId) {
-    throw new Error("Note not found");
-  }
-
-  let newContent = note.content;
-
-  switch (args.action_type) {
-    case "append":
-      newContent = newContent + "\n" + args.content_to_insert;
-      break;
-    case "insert_at_cursor":
-      newContent =
-        newContent.substring(0, cursorPosition) +
-        args.content_to_insert +
-        newContent.substring(cursorPosition);
-      break;
-    case "replace_all":
-      newContent = args.content_to_insert;
-      break;
-  }
-
-  const updated = await prisma.note.update({
-    where: { id: noteId },
-    data: { content: newContent },
-  });
-
-  return updated;
-}
-
-async function executeStackRowAdd(
-  stackId: string,
-  userId: string,
-  args: any
-): Promise<any> {
-  const stack = await prisma.stack.findUnique({
-    where: { id: stackId },
-    include: { columns: true },
-  });
-
-  if (!stack || stack.userId !== userId) {
-    throw new Error("Stack not found");
-  }
-
-  // Map column names to column IDs
-  const mappedData: Record<string, any> = {};
-
-  stack.columns.forEach((col: any) => {
-    if (args.data[col.name] !== undefined) {
-      mappedData[col.id] = args.data[col.name];
-    }
-  });
-
-  const newRow = await prisma.stackRow.create({
-    data: {
-      stackId,
-      data: mappedData,
-    },
-  });
-
-  return newRow;
 }
