@@ -1,59 +1,93 @@
 "use client";
 
 import { useWorkspaceStore } from "@/lib/store";
-import { Button } from "@/components/ui/button";
-import { X, Cloud, Loader } from "lucide-react";
-import Link from "next/link";
+import { X, Cloud, Loader, CheckSquare, CalendarDays } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+function getTabHref(tab: { id: string; type: string; title: string }): string {
+  switch (tab.type) {
+    case "NOTE": return `/workspace/notes/${tab.id}`;
+    case "STACK": return `/workspace/stacks/${tab.id}`;
+    case "TASKS": return `/workspace/tasks`;
+    case "CALENDAR": return `/workspace/calendar`;
+    default: {
+      void (tab.type as never);
+      return `/workspace`;
+    }
+  }
+}
 
 export default function TabBar() {
-  const { openTabs, activeTabId, closeTab, isSaving } = useWorkspaceStore();
+  const { openTabs, activeTabId, setActiveTab, closeTab, isSaving, syncState } = useWorkspaceStore();
+  const router = useRouter();
 
-  const handleCloseTab = (tabId: string, e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleCloseTab = (e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
+    const wasActive = useWorkspaceStore.getState().activeTabId === tabId;
     closeTab(tabId);
+    if (!wasActive) return;
+    const { activeTabId: nextId, openTabs: remaining } = useWorkspaceStore.getState();
+    if (nextId) {
+      const next = remaining.find((t) => t.id === nextId);
+      if (next) router.push(getTabHref(next));
+      return;
+    }
+    router.push("/workspace");
   };
 
   if (openTabs.length === 0) return null;
 
   return (
-    <div className="flex items-center bg-[#2a2a2a] border-b border-zinc-700/30 overflow-x-auto">
-      {openTabs.map((tab) => (
-        <div
-          key={tab.id}
-          className={`group flex items-center min-w-0 max-w-[24rem] border-r border-zinc-700/30 ${
-            activeTabId === tab.id
-              ? "bg-[#1e1e1e] text-slate-200"
-              : "text-slate-500 hover:bg-zinc-700/20"
-          } transition-colors duration-75`}
-        >
-          <Link
-            href={`/workspace/${tab.type === "NOTE" ? "notes" : "stacks"}/${tab.id}`}
-            className="flex items-center px-4 py-2 text-sm truncate flex-1"
-          >
-            <span className="truncate">{tab.title || "Untitled"}</span>
-          </Link>
-          <div className="flex items-center pr-3">
-            {activeTabId === tab.id && (
-              <div className="mr-2">
-                {isSaving ? (
-                  <Loader className="h-3 w-3 animate-spin text-slate-400" />
+      <div className="flex items-center h-10 bg-[#252525] border-b border-zinc-700/30 px-2">
+        <div className="flex items-center gap-1 overflow-x-auto flex-1">
+          {openTabs.map((tab) => (
+              <div
+                  key={tab.id}
+                  title={tab.type === "TASKS" ? "Tasks" : tab.type === "CALENDAR" ? "Calendar" : tab.title}
+                  className={`group flex items-center gap-2 px-3 py-1.5 rounded text-sm whitespace-nowrap transition-colors cursor-pointer ${
+                      activeTabId === tab.id
+                          ? "bg-white/10 text-slate-200"
+                          : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                  }`}
+                  onClick={() => {
+                    setActiveTab(tab.id);
+                    router.push(getTabHref(tab));
+                  }}
+              >
+                {tab.type === "TASKS" ? (
+                  <>
+                    <CheckSquare className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                    <span className="sr-only">Tasks</span>
+                  </>
+                ) : tab.type === "CALENDAR" ? (
+                  <>
+                    <CalendarDays className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
+                    <span className="sr-only">Calendar</span>
+                  </>
                 ) : (
-                  <Cloud className="h-3 w-3 text-slate-400" />
+                  <span>{tab.title}</span>
                 )}
+                <button
+                    type="button"
+                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity shrink-0"
+                    title={`Close ${tab.type === "TASKS" ? "Tasks" : tab.type === "CALENDAR" ? "Calendar" : tab.title}`}
+                    aria-label={`Close ${tab.type === "TASKS" ? "Tasks" : tab.type === "CALENDAR" ? "Calendar" : tab.title}`}
+                    onClick={(e) => handleCloseTab(e, tab.id)}
+                >
+                  <X size={14} />
+                </button>
               </div>
-            )}
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={(e) => handleCloseTab(tab.id, e)}
-              className="h-5 w-5 rounded opacity-0 group-hover:opacity-100 hover:bg-white/10"
-            >
-              <X className="h-3 w-3" />
-            </Button>
-          </div>
+          ))}
         </div>
-      ))}
-    </div>
+        <div className="ml-auto flex items-center pr-2">
+          {isSaving || syncState === "SAVING" ? (
+              <Loader className="h-4 w-4 animate-spin text-slate-400" />
+          ) : syncState === "ERROR" ? (
+              <Cloud className="h-4 w-4 text-red-400" />
+          ) : (
+              <Cloud className="h-4 w-4 text-green-400" />
+          )}
+        </div>
+      </div>
   );
 }

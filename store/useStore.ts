@@ -8,6 +8,8 @@ export {
   type TabType,
   type SyncState,
   type PendingAction,
-  type PendingActionType,
+  type Task,
+  type TaskStatus,
+  type TaskPriority,
+  type CalendarEvent,
 } from "../lib/store";
-

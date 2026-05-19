@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
     const cursorPosition = formData.get("cursorPosition") as string;
     const noteState = formData.get("note_state") as string;
     const dynamicSchema = formData.get("dynamic_schema") as string;
+    const taskContext = formData.get("task_context") as string | null;
 
     if (!audioFile) {
       return NextResponse.json(
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest) {
     }
     if (dynamicSchema) {
       fastApiFormData.append("dynamic_schema", dynamicSchema);
+    }
+    if (taskContext) {
+      fastApiFormData.append("task_context", taskContext);
     }
 
     // Add user ID for backend validation

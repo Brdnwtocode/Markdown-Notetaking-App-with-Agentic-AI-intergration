@@ -4,6 +4,7 @@ import Sidebar from "@/components/workspace/Sidebar";
 import TabBar from "@/components/workspace/TabBar";
 import PushToTalk from "@/components/shared/PushToTalk";
 import AISidebar from "@/components/workspace/AISidebar";
+import WorkspaceUserSync from "@/components/workspace/WorkspaceUserSync";
 
 export default async function WorkspaceLayout({
   children,
@@ -18,6 +19,7 @@ export default async function WorkspaceLayout({
 
   return (
     <div className="flex h-screen bg-[#050505] text-foreground">
+      <WorkspaceUserSync userId={session.user.id} />
       <Sidebar />
       <div className="flex-1 flex min-h-0 flex-col overflow-hidden">
         <TabBar />

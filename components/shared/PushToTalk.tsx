@@ -19,13 +19,18 @@ export default function PushToTalk() {
     currentStackId,
     cursorPosition,
     setIsVoiceMutating,
-    updateNote,
     stacks,
-    updateStack,
     noteCache,
     setPendingAction,
     setAiReply,
+    openTabs,
+    activeTabId,
+    currentFocusedTaskId,
+    tasks,
+    taskChildrenMap,
+    currentUserId,
   } = useWorkspaceStore();
+  void currentUserId;
 
   // Handle keyboard Ctrl + Space
   useEffect(() => {
@@ -110,16 +115,30 @@ export default function PushToTalk() {
     try {
       const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
 
-      // Determine context
-      const contextType = currentNoteId
-        ? "NOTE"
-        : currentStackId
-          ? "STACK"
-          : null;
-      const contextId = currentNoteId || currentStackId;
+      let contextType: string | null = null;
+      let contextId: string | null = null;
 
-      if (!contextType || !contextId) {
-        toast.error("Please select a note or stack first");
+      if (currentNoteId) {
+        contextType = "NOTE";
+        contextId = currentNoteId;
+      } else if (currentStackId) {
+        contextType = "STACK";
+        contextId = currentStackId;
+      } else {
+        const activeTab = openTabs.find((t) => t.id === activeTabId);
+        if (activeTab?.type === "TASKS") {
+          contextType = "TASK";
+          contextId = currentFocusedTaskId ?? "none";
+        } else if (activeTab?.type === "CALENDAR") {
+          contextType = "CALENDAR";
+          contextId = "none";
+        }
+      }
+
+      if (!contextType) {
+        toast.error(
+          "Please select a note, stack, tasks, or calendar first"
+        );
         return;
       }
 
@@ -127,7 +146,7 @@ export default function PushToTalk() {
       const formData = new FormData();
       formData.append("audio", audioBlob, "audio.webm");
       formData.append("contextType", contextType);
-      formData.append("contextId", contextId);
+      formData.append("contextId", contextId as string);
       formData.append("cursorPosition", cursorPosition.toString());
 
       // Add STT/LLM Context payload
@@ -138,6 +157,25 @@ export default function PushToTalk() {
         const activeStack = stacks.find((s) => s.id === currentStackId);
         if (activeStack) {
           formData.append("dynamic_schema", JSON.stringify(activeStack.columns));
+        }
+      }
+
+      if (contextType === "TASK" && currentFocusedTaskId) {
+        const allTasks = [
+          ...tasks,
+          ...Object.values(taskChildrenMap).flat(),
+        ];
+        const parentTask = allTasks.find(
+          (t) => t.id === currentFocusedTaskId
+        );
+        if (parentTask) {
+          formData.append(
+            "task_context",
+            JSON.stringify({
+              focusedTaskId: parentTask.id,
+              focusedTaskTitle: parentTask.title,
+            })
+          );
         }
       }
 
@@ -163,6 +201,16 @@ export default function PushToTalk() {
           stackId: currentStackId,
           data: updatedData,
         });
+      } else if (action === "create_task" && updatedData) {
+        setPendingAction({ type: "create_task", data: updatedData });
+      } else if (
+        action === "create_calendar_event" &&
+        updatedData
+      ) {
+        setPendingAction({
+          type: "create_calendar_event",
+          data: updatedData,
+        });
       }
 
       if (aiReply) {
@@ -171,11 +219,18 @@ export default function PushToTalk() {
 
       setRecordingTranscript(transcript);
       toast.success("Voice command processed!");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(
-        error.response?.data?.error || "Failed to process voice command"
-      );
+      const message =
+        axios.isAxiosError(error) &&
+        error.response?.data &&
+        typeof error.response.data === "object" &&
+        error.response.data !== null &&
+        "error" in error.response.data &&
+        typeof (error.response.data as { error: unknown }).error === "string"
+          ? (error.response.data as { error: string }).error
+          : "Failed to process voice command";
+      toast.error(message);
     } finally {
       setIsProcessing(false);
       setIsVoiceMutating(false);

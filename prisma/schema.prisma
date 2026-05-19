@@ -20,6 +20,8 @@ model User {
 
   notes  Note[]
   stacks Stack[]
+  tasks  Task[]
+  calendarEvents CalendarEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -57,6 +59,61 @@ enum DataType {
   BOOLEAN
   DATE
   SELECT
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id        String @id @default(uuid())
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  parentId  String?
+  parent    Task?  @relation("TaskSubtasks", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Task[] @relation("TaskSubtasks")
+
+  title       String
+  description String       @default("") @db.Text
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  assignee    String?
+  dueDate     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, parentId])
+  @@index([userId, status])
+  @@index([userId, dueDate])
+}
+
+model CalendarEvent {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title   String
+  notes   String   @default("") @db.Text
+  startAt DateTime
+  endAt   DateTime
+  allDay  Boolean  @default(false)
+  color   String   @default("#5645d4")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, startAt])
+  @@index([userId, endAt])
 }
 
 model StackColumn {

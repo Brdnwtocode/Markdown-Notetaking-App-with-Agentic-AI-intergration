@@ -7,7 +7,6 @@ import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWorkspaceStore } from "@/lib/store";
-import { Plus, LogOut, Database, PanelLeftOpen, PanelLeftClose, FileText, Table2, Search, ArrowUpAZ, ArrowDownAZ, Calendar, Filter } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +24,9 @@ import SchemaBuilder, {
 } from "@/components/workspace/SchemaBuilder";
 import axios from "axios";
 import toast from "react-hot-toast";
+import { Plus, LogOut, Database, PanelLeftOpen, PanelLeftClose, FileText, Table2, Search, ArrowUpAZ, ArrowDownAZ, Calendar, Filter, CheckSquare, CalendarDays } from "lucide-react";
+import { TASKS_TAB_ID, CALENDAR_TAB_ID } from "@/lib/constants";
+
 
 type SortMethod = "a-z" | "z-a" | "date-new" | "date-old" | "type";
 
@@ -45,6 +47,7 @@ export default function Sidebar() {
     currentNoteId,
     currentStackId,
     optimisticCreateNote,
+    openTab,
   } = useWorkspaceStore();
 
   useEffect(() => {
@@ -171,49 +174,72 @@ export default function Sidebar() {
   };
 
   return (
-    <div className="flex h-screen">
-      {/* Level 1: Ribbon - Actionable Buttons */}
-      <div className="w-12 bg-[#1e1e1e] border-r border-zinc-700/30 flex flex-col items-center py-4 space-y-2">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => setIsExplorerOpen(!isExplorerOpen)}
-          className="h-10 w-10 rounded hover:bg-white/5"
-          title={isExplorerOpen ? "Close Explorer" : "Open Explorer"}
-        >
-          {isExplorerOpen ? <PanelLeftClose className="h-5 w-5 text-slate-400" /> : <PanelLeftOpen className="h-5 w-5 text-slate-400" />}
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={createNote}
-          className="h-10 w-10 rounded hover:bg-white/5"
-          title="New Note"
-        >
-          <Plus className="h-5 w-5 text-slate-400" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => setShowStackDialog(true)}
-          className="h-10 w-10 rounded hover:bg-white/5"
-          title="New Stack"
-        >
-          <Database className="h-5 w-5 text-slate-400" />
-        </Button>
-        <div className="flex-1" />
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={() => signOut({ redirectTo: "/" })}
-          className="h-10 w-10 rounded hover:bg-white/5"
-          title="Sign Out"
-        >
-          <LogOut className="h-5 w-5 text-slate-400" />
-        </Button>
-      </div>
-
-      {/* Level 2: Unified Explorer */}
+      <div className="flex h-screen">
+        {/* Level 1: Ribbon - Actionable Buttons */}
+        <div className="w-12 bg-[#1e1e1e] border-r border-zinc-700/30 flex flex-col items-center py-4 space-y-2">
+          <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setIsExplorerOpen(!isExplorerOpen)}
+              className="h-10 w-10 rounded hover:bg-white/5"
+              title={isExplorerOpen ? "Close Explorer" : "Open Explorer"}
+          >
+            {isExplorerOpen ? <PanelLeftClose className="h-5 w-5 text-slate-400" /> : <PanelLeftOpen className="h-5 w-5 text-slate-400" />}
+          </Button>
+          <Button
+              size="icon"
+              variant="ghost"
+              onClick={createNote}
+              className="h-10 w-10 rounded hover:bg-white/5"
+              title="New Note"
+          >
+            <Plus className="h-5 w-5 text-slate-400" />
+          </Button>
+          <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setShowStackDialog(true)}
+              className="h-10 w-10 rounded hover:bg-white/5"
+              title="New Stack"
+          >
+            <Database className="h-5 w-5 text-slate-400" />
+          </Button>
+          <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => {
+                openTab(TASKS_TAB_ID, "TASKS", "Tasks");
+                router.push("/workspace/tasks");
+              }}
+              className="h-10 w-10 rounded hover:bg-white/5"
+              title="Tasks"
+          >
+            <CheckSquare className="h-5 w-5 text-slate-400" />
+          </Button>
+          <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => {
+                openTab(CALENDAR_TAB_ID, "CALENDAR", "Calendar");
+                router.push("/workspace/calendar");
+              }}
+              className="h-10 w-10 rounded hover:bg-white/5"
+              title="Calendar"
+          >
+            <CalendarDays className="h-5 w-5 text-slate-400" />
+          </Button>
+          <div className="flex-1" />
+          <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => signOut({ redirectTo: "/" })}
+              className="h-10 w-10 rounded hover:bg-white/5"
+              title="Sign Out"
+          >
+            <LogOut className="h-5 w-5 text-slate-400" />
+          </Button>
+        </div>
+        {/* Level 2: Unified Explorer */}
       {isExplorerOpen && (
         <div className="w-72 bg-[#262626] border-r border-zinc-700/30 flex flex-col">
           <div className="p-3 border-b border-zinc-700/30 space-y-2">
