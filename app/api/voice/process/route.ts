@@ -19,6 +19,7 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const audioFile = formData.get("audio") as File;
+    const transcript = formData.get("transcript") as string | null;
     const contextType = formData.get("contextType") as string;
     const contextId = formData.get("contextId") as string;
     const cursorPosition = formData.get("cursorPosition") as string;
@@ -26,14 +27,14 @@ export async function POST(request: NextRequest) {
     const dynamicSchema = formData.get("dynamic_schema") as string;
     const taskContext = formData.get("task_context") as string | null;
 
-    if (!audioFile) {
+    if (!audioFile && !transcript) {
       return NextResponse.json(
-        { error: "No audio file provided" },
+        { error: "No audio file or transcript provided" },
         { status: 400 }
       );
     }
 
-    if (audioFile.size > 10 * 1024 * 1024) {
+    if (audioFile && audioFile.size > 10 * 1024 * 1024) {
       return NextResponse.json(
         { error: "Audio file too large (max 10MB)" },
         { status: 400 }
@@ -42,7 +43,12 @@ export async function POST(request: NextRequest) {
 
     // Build FormData with snake_case keys for FastAPI
     const fastApiFormData = new FormData();
-    fastApiFormData.append("audio", audioFile);
+    if (audioFile) {
+      fastApiFormData.append("audio", audioFile);
+    }
+    if (transcript) {
+      fastApiFormData.append("transcript", transcript);
+    }
     fastApiFormData.append("context_type", contextType);
     fastApiFormData.append("context_id", contextId);
     
