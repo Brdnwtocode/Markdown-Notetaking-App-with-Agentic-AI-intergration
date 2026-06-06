@@ -1,5 +1,7 @@
 import { auth } from "@/app/auth";
 import { NextRequest, NextResponse } from "next/server";
+import type { VoiceResponse } from "../../../../types/voice";
+import { assertMutualExclusivity } from "../../../../types/voice";
 
 export const maxDuration = 60; // Vercel serverless function timeout
 
@@ -8,6 +10,7 @@ export const maxDuration = 60; // Vercel serverless function timeout
  * 
  * This route acts as a proxy to the FastAPI microservice.
  * It translates camelCase fields to snake_case before forwarding.
+ * Now supports packed_context for multiple context items.
  */
 export async function POST(request: NextRequest) {
   const session = await auth();
@@ -26,6 +29,7 @@ export async function POST(request: NextRequest) {
     const noteState = formData.get("note_state") as string;
     const dynamicSchema = formData.get("dynamic_schema") as string;
     const taskContext = formData.get("task_context") as string | null;
+    const packedContextStr = formData.get("packed_context") as string | null;
 
     if (!audioFile && !transcript) {
       return NextResponse.json(
@@ -49,18 +53,30 @@ export async function POST(request: NextRequest) {
     if (transcript) {
       fastApiFormData.append("transcript", transcript);
     }
-    fastApiFormData.append("context_type", contextType);
-    fastApiFormData.append("context_id", contextId);
+
+    // Handle packed_context (new) or legacy single context (backward compatible)
+    if (packedContextStr) {
+      fastApiFormData.append("packed_context", packedContextStr);
+    } else {
+      // Legacy single context
+      fastApiFormData.append("context_type", contextType);
+      fastApiFormData.append("context_id", contextId);
+    }
     
     if (cursorPosition) {
       fastApiFormData.append("cursor_position", cursorPosition);
     }
+    
+    // Typed request fields for FastAPI contract
+    // note_state: current note content (sent when a note is open)
     if (noteState) {
       fastApiFormData.append("note_state", noteState);
     }
+    // dynamic_schema: stack column schema (sent when contextType is STACK)
     if (dynamicSchema) {
       fastApiFormData.append("dynamic_schema", dynamicSchema);
     }
+    // task_context: focused task context (sent when contextType is TASK)
     if (taskContext) {
       fastApiFormData.append("task_context", taskContext);
     }
@@ -68,7 +84,12 @@ export async function POST(request: NextRequest) {
     // Add user ID for backend validation
     fastApiFormData.append("user_id", session.user.id);
 
-    const fastApiUrl = process.env.FASTAPI_URL || "http://127.0.0.1:8000";
+    // Use FastAPI URL from env, with fallback to 0.0.0.0:8000 (all interfaces)
+    const fastApiUrl = process.env.FASTAPI_URL || "http://0.0.0.0:8000";
+
+    console.log(`\n[FastAPI Request] POST ${fastApiUrl}/api/v1/voice/process`);
+    console.log(`[FastAPI Request] User: ${session.user.id}, Has Audio: ${!!audioFile}, Has Transcript: ${!!transcript}`);
+    console.log(`[FastAPI Request] Context: ${packedContextStr ? 'packed_context' : `${contextType}/${contextId}`}`);
 
     // Forward to FastAPI microservice
     const fastApiResponse = await fetch(
@@ -88,7 +109,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const responseData = await fastApiResponse.json();
+    const rawData = await fastApiResponse.json();
+    
+    // Normalize FastAPI response to VoiceResponse contract:
+    // FastAPI may return "reply" instead of "aiReply", or snake_case fields.
+    const responseData: VoiceResponse = {
+      action: rawData.action || "",
+      updatedData: rawData.updatedData ?? rawData.updated_data ?? null,
+      aiReply: rawData.aiReply ?? rawData.reply ?? rawData.ai_reply ?? null,
+      error: rawData.error ?? null,
+    };
+    
+    // Assert contract: updatedData and aiReply should be mutually exclusive
+    assertMutualExclusivity(responseData);
+    
+    console.log(`[FastAPI Response] Status: ${fastApiResponse.status}`);
+    console.log(`[FastAPI Response] Action: ${responseData.action}`);
+    console.log(`[FastAPI Response] Has updatedData: ${responseData.updatedData != null}`);
+    console.log(`[FastAPI Response] Has aiReply: ${!!responseData.aiReply}`);
+    console.log(`[FastAPI Response] Full data:`, JSON.stringify(responseData, null, 2));
+    console.log(`[FastAPI Response] ---\n`);
+    
     return NextResponse.json(responseData);
   } catch (error) {
     console.error("Voice proxy error:", error);

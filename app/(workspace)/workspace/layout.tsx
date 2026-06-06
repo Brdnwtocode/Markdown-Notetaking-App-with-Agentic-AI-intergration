@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Sidebar from "@/components/workspace/Sidebar";
 import TabBar from "@/components/workspace/TabBar";
 import PushToTalk from "@/components/shared/PushToTalk";
-import AISidebar from "@/components/workspace/AISidebar";
+import ChatSidebar from "@/components/workspace/ChatSidebar";
 import WorkspaceUserSync from "@/components/workspace/WorkspaceUserSync";
 
 export default async function WorkspaceLayout({
@@ -30,7 +30,7 @@ export default async function WorkspaceLayout({
         </main>
         <PushToTalk />
       </div>
-      <AISidebar />
+      <ChatSidebar />
     </div>
   );
 }

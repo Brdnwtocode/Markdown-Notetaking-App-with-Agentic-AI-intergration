@@ -100,11 +100,20 @@ export function useDeepgramSTT({
 
   // ─── Fallback path ─────────────────────────────────────────────────────────
 
-  const runFallback = useCallback(async () => {
-    const ctx = sessionContextRef.current;
-    if (!ctx) return;
+  const runFallback = useCallback(async (fallbackCtx?: {
+    contextType: string;
+    contextId: string;
+    extras: FormData;
+  } | null) => {
+    const ctx = fallbackCtx || sessionContextRef.current;
+    if (!ctx) {
+      console.warn("[useDeepgramSTT] runFallback: no context found");
+      return;
+    }
 
     setStatus("fallback");
+    // Clear context ref early so duplicate calls do not trigger multiple fallback runs
+    sessionContextRef.current = null;
     toast("Network issue — using batch transcription", { icon: "⚠️" });
 
     // Stop WebSocket (no-op if already gone)
@@ -179,7 +188,7 @@ export function useDeepgramSTT({
         }
       } catch (err) {
         console.warn("[useDeepgramSTT] Token mint failed, falling back:", err);
-        return runFallback();
+        return runFallback(sessionContextRef.current);
       }
 
       // 2. Open Deepgram WebSocket via the official SDK.
@@ -190,7 +199,7 @@ export function useDeepgramSTT({
       // Arm fallback timer — cancelled when the socket opens successfully
       fallbackTimerRef.current = setTimeout(() => {
         console.warn("[useDeepgramSTT] WS connect timeout, falling back");
-        runFallback();
+        runFallback(sessionContextRef.current);
       }, wsTimeoutMs);
 
       const wsUrl = `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&smart_format=true&interim_results=true&endpointing=1000&punctuate=true&encoding=linear16&sample_rate=16000`;
@@ -221,15 +230,16 @@ export function useDeepgramSTT({
         await connectPromise;
       } catch (err) {
         console.warn("[useDeepgramSTT] WS connect failed, falling back:", err);
-        return runFallback();
+        return runFallback(sessionContextRef.current);
       }
 
       socket.onclose = () => {
         // Only fall back if we haven't already entered finalization/fallback
         setStatus((prev) => {
           if (prev === "streaming") {
+            const ctxCopy = sessionContextRef.current;
             // schedule outside this setter
-            setTimeout(() => runFallback(), 0);
+            setTimeout(() => runFallback(ctxCopy), 0);
           }
           return prev;
         });
@@ -239,7 +249,8 @@ export function useDeepgramSTT({
         console.warn("[useDeepgramSTT] WS error:", err);
         setStatus((prev) => {
           if (prev === "streaming") {
-            setTimeout(() => runFallback(), 0);
+            const ctxCopy = sessionContextRef.current;
+            setTimeout(() => runFallback(ctxCopy), 0);
           }
           return prev;
         });
@@ -252,7 +263,7 @@ export function useDeepgramSTT({
           const alternative = data?.channel?.alternatives?.[0];
           const chunk: string = alternative?.transcript ?? "";
 
-          if (data.is_final && data.speech_final) {
+          if (data.is_final) {
             // Accumulate committed segments
             if (chunk) {
               committedTranscriptRef.current = committedTranscriptRef.current
@@ -390,9 +401,9 @@ export function useDeepgramSTT({
    */
   const stop = useCallback(async () => {
     if (status === "idle" || status === "fallback") return;
-
+ 
     setStatus("finalizing");
-
+ 
     if (dgConnectionRef.current) {
       // Signal Deepgram to flush — it will send remaining speech_final events
       try {
@@ -400,21 +411,23 @@ export function useDeepgramSTT({
       } catch (err) {
         console.warn("[useDeepgramSTT] sendCloseStream failed:", err);
       }
-
+ 
       // Wait for final transcript; Deepgram typically responds in <500ms
       await new Promise<void>((resolve) => setTimeout(resolve, 800));
-
+ 
       const finalText = committedTranscriptRef.current;
       onTranscriptReady(finalText);
+      cleanup();
+      blobsRef.current = [];
+      sessionContextRef.current = null;
+      committedTranscriptRef.current = "";
+      setStatus("idle");
+    } else {
+      // WebSocket was not connected when stop() was called. Run fallback.
+      console.warn("[useDeepgramSTT] stop() called with no active WS connection, running fallback.");
+      await runFallback(sessionContextRef.current);
     }
-
-    // If we're in fallback the runFallback() call already handles onTranscriptReady
-    cleanup();
-    blobsRef.current = [];
-    sessionContextRef.current = null;
-    committedTranscriptRef.current = "";
-    setStatus("idle");
-  }, [status, onTranscriptReady, cleanup]);
+  }, [status, onTranscriptReady, cleanup, runFallback]);
 
   return { status, start, stop };
 }

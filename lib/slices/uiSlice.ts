@@ -15,10 +15,14 @@ export interface UiSlice {
   // Tabs
   openTabs: OpenTab[];
   activeTabId: string | null;
+  selectedTabIds: string[]; // For multi-tab context selection
   openTab: (id: string, type: TabType, title: string) => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string | null) => void;
   updateTabTitle: (id: string, newTitle: string) => void;
+  toggleTabSelection: (tabId: string) => void;
+  clearTabSelection: () => void;
+  selectAllTabs: () => void;
 
   // Sync status
   syncState: SyncState;
@@ -44,6 +48,7 @@ export const createUiSlice: StateCreator<RootStore, [], [], UiSlice> = (set) => 
   // Tabs
   openTabs: [],
   activeTabId: null,
+  selectedTabIds: [], // Initialize empty selection
   openTab: (id, type, title) => {
     set((state) => {
       const exists = state.openTabs.some((t) => t.id === id);
@@ -126,4 +131,22 @@ export const createUiSlice: StateCreator<RootStore, [], [], UiSlice> = (set) => 
   // Current user
   currentUserId: null,
   setCurrentUserId: (id) => set({ currentUserId: id }),
+
+  // Multi-tab selection for context
+  selectedTabIds: [],
+  toggleTabSelection: (tabId) => {
+    set((state) => {
+      const isSelected = state.selectedTabIds.includes(tabId);
+      const selectedTabIds = isSelected
+        ? state.selectedTabIds.filter((id) => id !== tabId)
+        : [...state.selectedTabIds, tabId];
+      return { selectedTabIds };
+    });
+  },
+  clearTabSelection: () => set({ selectedTabIds: [] }),
+  selectAllTabs: () => {
+    set((state) => ({
+      selectedTabIds: state.openTabs.map((t) => t.id),
+    }));
+  },
 });

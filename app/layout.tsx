@@ -1,9 +1,9 @@
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { SessionProvider } from "next-auth/react";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
+import AuthSessionProvider from "@/components/shared/AuthSessionProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -27,10 +27,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning className={`${inter.variable} font-sans dark`}>
       <body className="font-sans">
-        <SessionProvider>
+        <AuthSessionProvider>
           {children}
           <Toaster position="bottom-right" />
-        </SessionProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );

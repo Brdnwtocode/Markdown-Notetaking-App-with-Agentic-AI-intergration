@@ -11,7 +11,7 @@ import { callCommand } from '@milkdown/utils';
 import { toggleStrongCommand, toggleEmphasisCommand, toggleInlineCodeCommand } from '@milkdown/preset-commonmark';
 import { toggleStrikethroughCommand } from '@milkdown/preset-gfm';
 import { Bold, Italic, Strikethrough, Code, Link as LinkIcon } from 'lucide-react';
-import { useEffect, useRef, useMemo } from 'react';
+import { useRef, useMemo } from 'react';
 import { useWorkspaceStore } from "@/lib/store";
 import * as diff from 'diff';
 
@@ -22,33 +22,8 @@ interface LiveEditorProps {
   content: string;
 }
 
-const TooltipMenu = () => {
-  const ref = useRef<HTMLDivElement>(null);
-  const tooltipProvider = useRef<TooltipProvider>();
+const TooltipMenu = ({ toolbarRef }: { toolbarRef: React.RefObject<HTMLDivElement | null> }) => {
   const [, get] = useInstance();
-
-  useEffect(() => {
-    if (!ref.current || !get()) return;
-
-    tooltipProvider.current = new TooltipProvider({
-      content: ref.current,
-    });
-
-    return () => {
-      tooltipProvider.current?.destroy();
-    };
-  }, [get]);
-
-  useEffect(() => {
-    const editor = get();
-    if (!editor || !tooltipProvider.current) return;
-
-    editor.action((ctx) => {
-      ctx.set(tooltip.key, {
-        view: () => tooltipProvider.current as any,
-      });
-    });
-  }, [get]);
 
   const onFormat = (e: React.MouseEvent, command: any) => {
     e.preventDefault();
@@ -60,7 +35,7 @@ const TooltipMenu = () => {
   return (
     <div className="hidden">
       <div 
-        ref={ref} 
+        ref={toolbarRef}
         className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1 shadow-xl"
       >
         <button onMouseDown={(e) => onFormat(e, toggleStrongCommand.key)} className="p-1.5 hover:bg-zinc-800 rounded text-slate-300 hover:text-white transition-colors">
@@ -88,12 +63,22 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
   const { setIsSaving, isVoiceMutating, optimisticPatchNote } = useWorkspaceStore();
   const autoSaveTimer = useRef<NodeJS.Timeout>();
   const isFirstMount = useRef(true);
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
   useEditor((root) => {
     return Editor.make()
       .config((ctx) => {
         ctx.set(rootCtx, root);
         ctx.set(defaultValueCtx, content);
+        // Configure tooltip view lazily — avoids race condition with plugin init
+        ctx.set(tooltip.key, {
+          view: () => {
+            const el = toolbarRef.current;
+            if (!el) return { destroy: () => {} } as any;
+            const provider = new TooltipProvider({ content: el });
+            return provider;
+          },
+        });
         ctx.get(listenerCtx).markdownUpdated((_ctx, markdown, _prevMarkdown) => {
           if (isFirstMount.current) {
             isFirstMount.current = false;
@@ -124,7 +109,7 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
   return (
     <>
       <Milkdown />
-      <TooltipMenu />
+      <TooltipMenu toolbarRef={toolbarRef} />
     </>
   );
 };
@@ -141,20 +126,6 @@ const DiffOverlay = ({
   onDiscard: () => void 
 }) => {
   const diffs = useMemo(() => diff.diffWordsWithSpace(original, updated), [original, updated]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        onAccept();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        onDiscard();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onAccept, onDiscard]);
 
   return (
     <div className="absolute inset-0 z-40 bg-[#0b1118] overflow-y-auto">
@@ -179,11 +150,11 @@ const DiffOverlay = ({
           </span>
           AI Suggested Edits
         </span>
-        <button onClick={onAccept} className="text-sm text-slate-300 hover:text-white flex items-center gap-2 hover:bg-white/5 px-2 py-1 rounded transition-colors">
-          Accept <span className="bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded text-[10px] text-slate-400 font-mono">Enter</span>
+        <button onClick={onAccept} className="text-sm text-slate-300 hover:text-white flex items-center gap-2 hover:bg-white/5 px-3 py-1 rounded transition-colors font-medium">
+          Accept
         </button>
-        <button onClick={onDiscard} className="text-sm text-slate-300 hover:text-white flex items-center gap-2 hover:bg-white/5 px-2 py-1 rounded transition-colors">
-          Discard <span className="bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded text-[10px] text-slate-400 font-mono">Esc</span>
+        <button onClick={onDiscard} className="text-sm text-slate-300 hover:text-white flex items-center gap-2 hover:bg-white/5 px-3 py-1 rounded transition-colors font-medium">
+          Discard
         </button>
       </div>
     </div>
@@ -191,23 +162,19 @@ const DiffOverlay = ({
 };
 
 export default function LiveEditor({ noteId, content }: LiveEditorProps) {
-  const { pendingAction, commitPendingAction, clearPendingAction } = useWorkspaceStore();
-  const isPending = pendingAction?.type === "update_note" && pendingAction.noteId === noteId;
+  const { pendingMutation, confirmMutation, discardMutation } = useWorkspaceStore();
+  const isPending = pendingMutation?.type === "update_note" && pendingMutation.noteId === noteId;
 
   return (
     <div className="prose prose-invert prose-lg max-w-none w-full bg-transparent text-slate-200 [&_.ProseMirror]:outline-none [&_.ProseMirror]:border-none focus:[&_.ProseMirror]:outline-none focus:[&_.ProseMirror]:ring-0 focus-visible:[&_.ProseMirror]:outline-none focus-visible:[&_.ProseMirror]:ring-0 pb-64 relative min-h-[500px]" 
       style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' }}>
       
-      {isPending && pendingAction.type === "update_note" && (
+      {isPending && pendingMutation.type === "update_note" && (
         <DiffOverlay 
-          original={content} 
-          updated={pendingAction.updatedData.content} 
-          onAccept={() => {
-            commitPendingAction();
-            // In a real scenario, you'd replace milkdown's content here.
-            // Since milkdown state management varies, we rely on the parent component or the store to handle re-hydration.
-          }} 
-          onDiscard={clearPendingAction} 
+          original={pendingMutation.originalContent} 
+          updated={pendingMutation.updatedData.content} 
+          onAccept={() => confirmMutation()} 
+          onDiscard={discardMutation} 
         />
       )}
 

@@ -13,6 +13,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Mic } from "lucide-react";
 import { useWorkspaceStore } from "@/lib/store";
+import { ContextPacker, extractMentions } from "@/lib/context/packer";
 import { useDeepgramSTT, STTStatus } from "@/lib/hooks/useDeepgramSTT";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -28,13 +29,17 @@ export default function PushToTalk() {
     setIsVoiceMutating,
     stacks,
     noteCache,
-    setPendingAction,
+    stageMutation,
     setAiReply,
     openTabs,
     activeTabId,
     currentFocusedTaskId,
     tasks,
     taskChildrenMap,
+    setIsChatOpen,
+    addChatMessage,
+    updateChatMessage,
+    openTab,
   } = useWorkspaceStore();
 
   // ─── Transcript ready → LLM action pipeline ────────────────────────────────
@@ -52,47 +57,92 @@ export default function PushToTalk() {
 
       setIsVoiceMutating(true);
       setRecordingTranscript(transcript);
+      setIsChatOpen(true); // Open chat when processing voice command
+      
+      toast.loading("Processing voice command...", { id: "voice-processing" });
 
+      let aiMsgId: string | null = null;
       try {
-        // Build context — same logic as the old processAudio()
-        let contextType: string | null = null;
-        let contextId: string | null = null;
+        // Build context using ContextPacker (modular)
+        const store = useWorkspaceStore.getState();
+        const packer = new ContextPacker(store);
+        
+        // Collect tab IDs to pack
+        const tabIds = store.selectedTabIds.length > 0 
+          ? store.selectedTabIds 
+          : (store.activeTabId ? [store.activeTabId] : []);
+        
+        // Extract @mentions from transcript
+        const mentions = extractMentions(transcript);
+        
+        // Pack context with transcript for command detection
+        let packedContext = await packer.pack({
+          tabIds,
+          mentions: mentions.length > 0 ? mentions : undefined,
+          transcript, // Pass transcript for command type detection
+        });
 
-        if (currentNoteId) {
-          contextType = "NOTE";
-          contextId = currentNoteId;
-        } else if (currentStackId) {
-          contextType = "STACK";
-          contextId = currentStackId;
-        } else {
-          const activeTab = openTabs.find((t) => t.id === activeTabId);
-          if (activeTab?.type === "TASKS") {
-            contextType = "TASK";
-            contextId = currentFocusedTaskId ?? "none";
-          } else if (activeTab?.type === "CALENDAR") {
-            contextType = "CALENDAR";
-            contextId = "none";
-          }
+        if (packedContext.items.length === 0) {
+          packedContext = {
+            items: [
+              {
+                type: "NOTE",
+                id: "00000000-0000-0000-0000-000000000000",
+                title: "No active context",
+                content: "",
+                source: "active_tab",
+              }
+            ],
+            packedAt: new Date(),
+            totalItems: 0
+          };
         }
 
-        if (!contextType) {
-          // Context check already happened in handleStart; this is a safety guard
-          return;
-        }
+        // Add user message to chat with packed context
+        addChatMessage({
+          type: "user",
+          content: transcript,
+          context: {
+            items: packedContext.items.map((item: any) => ({
+              type: item.type,
+              id: item.id,
+              title: item.title,
+              source: item.source,
+            })),
+            packedAt: packedContext.packedAt,
+            totalItems: packedContext.totalItems,
+          },
+          status: "completed",
+        });
 
-        // Post transcript as text to FastAPI — FastAPI skips STT when transcript is provided
+        // Add AI processing message and get its ID
+        aiMsgId = addChatMessage({
+          type: "ai",
+          content: "",
+          status: "processing",
+        });
+
+  // Post transcript as text to FastAPI — FastAPI skips STT when transcript is provided
         const form = new FormData();
         form.append("transcript", transcript);          // new: text input
-        form.append("contextType", contextType);
-        form.append("contextId", contextId as string);
-        form.append("cursorPosition", cursorPosition.toString());
+        form.append("packed_context", JSON.stringify(packedContext));
 
-        if (contextType === "NOTE" && currentNoteId) {
-          form.append("note_state", noteCache[currentNoteId]?.content ?? "");
-        } else if (contextType === "STACK" && currentStackId) {
+        // For backward compatibility, also send primary context
+        const primary = packedContext.items[0];
+        if (primary) {
+          form.append("contextType", primary.type);
+          form.append("contextId", primary.id);
+          form.append("cursorPosition", cursorPosition.toString());
+        }
+
+        let originalContent = "";
+        if (primary.type === "NOTE" && currentNoteId && primary.id !== "00000000-0000-0000-0000-000000000000") {
+          originalContent = noteCache[currentNoteId]?.content ?? "";
+          form.append("note_state", originalContent);
+        } else if (primary.type === "STACK" && currentStackId && primary.id !== "00000000-0000-0000-0000-000000000000") {
           const stack = stacks.find((s) => s.id === currentStackId);
           if (stack) form.append("dynamic_schema", JSON.stringify(stack.columns));
-        } else if (contextType === "TASK" && currentFocusedTaskId) {
+        } else if (primary.type === "TASK" && currentFocusedTaskId && primary.id !== "00000000-0000-0000-0000-000000000000") {
           const allTasks = [...tasks, ...Object.values(taskChildrenMap).flat()];
           const focused = allTasks.find((t) => t.id === currentFocusedTaskId);
           if (focused) {
@@ -103,32 +153,120 @@ export default function PushToTalk() {
           }
         }
 
+        console.log("[PushToTalk] Form data prepared, sending to /api/voice/process");
+        console.log("[PushToTalk] Transcript:", transcript);
+        console.log("[PushToTalk] Primary context:", primary);
+
         const res = await axios.post("/api/voice/process", form, {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
+        console.log("[PushToTalk] Voice API response:", res.data);
         const { action, updatedData, aiReply } = res.data;
 
-        if (action === "update_note" && updatedData && currentNoteId) {
-          setPendingAction({ type: "update_note", noteId: currentNoteId, updatedData });
-        } else if (action === "add_stack_row" && updatedData && currentStackId) {
-          setPendingAction({ type: "add_stack_row", stackId: currentStackId, data: updatedData });
-        } else if (action === "create_task" && updatedData) {
-          setPendingAction({ type: "create_task", data: updatedData });
-        } else if (action === "create_calendar_event" && updatedData) {
-          setPendingAction({ type: "create_calendar_event", data: updatedData });
+        let replyContent = aiReply || "Done!";
+
+        if (action && updatedData) {
+          if (action === "update_note") {
+            const noteId: string = updatedData?.id || currentNoteId;
+            if (!noteId) {
+              replyContent = "AI suggested edits but no note is open to display them.";
+            } else {
+              const noteTitle = updatedData?.title || noteCache[noteId]?.title || "Note";
+              openTab(noteId, "NOTE", noteTitle);
+              stageMutation({
+                type: "update_note",
+                noteId,
+                originalContent: noteCache[noteId]?.content || originalContent || "",
+                updatedData,
+              });
+              replyContent = `AI suggested edits to "${noteTitle}".\n\nReview the highlighted diff and click **Accept** to save or **Discard** to revert.`;
+            }
+          } else if (action === "add_stack_row") {
+            const stackId: string = updatedData?.stackId || currentStackId;
+            if (!stackId) {
+              replyContent = "AI suggested a new row but no stack is open to display it.";
+            } else {
+              const stack = stacks.find((s) => s.id === stackId);
+              const stackName = stack?.name || "Stack";
+              openTab(stackId, "STACK", stackName);
+              stageMutation({ type: "add_stack_row", stackId, data: updatedData });
+              replyContent = `AI suggested a new row in "${stackName}".\n\nReview the highlighted ghost row and click **Accept** to save or **Discard** to revert.`;
+            }
+          } else if (action === "create_task") {
+            stageMutation({ type: "create_task", data: updatedData });
+            replyContent = `AI suggested a new task: "${updatedData?.title || "Untitled"}".\n\nReview and click **Accept** to save or **Discard** to revert.`;
+          } else if (action === "create_calendar_event") {
+            stageMutation({ type: "create_calendar_event", data: updatedData });
+            replyContent = `AI suggested a new calendar event: "${updatedData?.title || "Untitled"}".\n\nReview and click **Accept** to save or **Discard** to revert.`;
+          } else if (action === "bulk_update_stack") {
+            const stackId: string = updatedData?.stackId || currentStackId;
+            if (stackId && updatedData?.updates) {
+              const stack = stacks.find((s) => s.id === stackId);
+              const stackName = stack?.name || "Stack";
+              openTab(stackId, "STACK", stackName);
+              stageMutation({ type: "bulk_update_stack", stackId, updates: updatedData.updates });
+              replyContent = `AI suggested bulk updates to ${updatedData.updates.length} row(s) in "${stackName}".\n\nReview and click **Accept** to save or **Discard** to revert.`;
+            } else {
+              replyContent = "AI suggested bulk updates but no stack is open.";
+            }
+          } else if (action === "manage_tasks") {
+            stageMutation({ type: "manage_tasks", action: updatedData?.action || "create", data: updatedData });
+            replyContent = `AI suggested a task ${updatedData?.action || "update"}.\n\nReview and click **Accept** to save or **Discard** to revert.`;
+          }
+          toast.dismiss("voice-processing");
+        } else if (action === "summarize_context") {
+          replyContent = aiReply || "Summary generated.";
+          toast.dismiss("voice-processing");
+        } else if (action === "none") {
+          replyContent = aiReply || "Please provide more context.";
+          toast.dismiss("voice-processing");
+        } else if (!action && !updatedData && aiReply) {
+          // Pure conversational reply — use aiReply directly (already set above)
+          toast.dismiss("voice-processing");
+        } else {
+          toast.dismiss("voice-processing");
         }
 
+        // Update AI message with the appropriate reply
+        updateChatMessage(aiMsgId, {
+          content: replyContent,
+          status: "completed",
+        });
+
         if (aiReply) setAiReply(aiReply);
-        toast.success("Voice command processed!");
       } catch (err: unknown) {
         console.error("[PushToTalk] Action pipeline failed:", err);
-        const message =
-          axios.isAxiosError(err) &&
-          typeof err.response?.data?.error === "string"
-            ? err.response.data.error
-            : "Failed to process voice command";
-        toast.error(message);
+        toast.dismiss("voice-processing");
+        
+        let displayMessage = "Failed to process voice command. Please try again.";
+        
+        // Enhanced error logging
+        if (axios.isAxiosError(err)) {
+          console.error("[PushToTalk] Axios error details:", {
+            status: err.response?.status,
+            statusText: err.response?.statusText,
+            data: err.response?.data,
+            url: err.config?.url,
+          });
+          
+          const apiError = err.response?.data?.error;
+          if (apiError === "Command not recognized as a workspace action.") {
+            displayMessage = "Command not recognized as a workspace action. Please clarify your request and try again.";
+          } else if (typeof apiError === "string" && apiError.trim() !== "") {
+            displayMessage = apiError;
+          }
+        }
+        
+        // Update assistant message with the error and mark it as error status
+        if (aiMsgId) {
+          updateChatMessage(aiMsgId, {
+            content: displayMessage,
+            status: "error",
+          });
+        }
+        
+        toast.error(displayMessage);
       } finally {
         setIsVoiceMutating(false);
       }
@@ -137,7 +275,8 @@ export default function PushToTalk() {
     [
       currentNoteId, currentStackId, cursorPosition, openTabs, activeTabId,
       currentFocusedTaskId, tasks, taskChildrenMap, noteCache, stacks,
-      setIsVoiceMutating, setRecordingTranscript, setPendingAction, setAiReply,
+      setIsVoiceMutating, setRecordingTranscript, stageMutation, setAiReply,
+      setIsChatOpen, addChatMessage, updateChatMessage, openTab,
     ]
   );
 
@@ -155,43 +294,45 @@ export default function PushToTalk() {
   const handleStart = useCallback(async () => {
     if (status !== "idle") return;
 
-    let contextType: string | null = null;
-    let contextId: string | null = null;
+    // Use ContextPacker to check if we have valid context
+    const store = useWorkspaceStore.getState();
+    const packer = new ContextPacker(store);
+    
+    const tabIds = store.selectedTabIds.length > 0 
+      ? store.selectedTabIds 
+      : (store.activeTabId ? [store.activeTabId] : []);
+    
+    let packed = await packer.pack({ tabIds });
 
-    if (currentNoteId) {
-      contextType = "NOTE";
-      contextId = currentNoteId;
-    } else if (currentStackId) {
-      contextType = "STACK";
-      contextId = currentStackId;
-    } else {
-      const activeTab = openTabs.find((t) => t.id === activeTabId);
-      if (activeTab?.type === "TASKS") {
-        contextType = "TASK";
-        contextId = currentFocusedTaskId ?? "none";
-      } else if (activeTab?.type === "CALENDAR") {
-        contextType = "CALENDAR";
-        contextId = "none";
-      }
-    }
-
-    if (!contextType) {
-      toast.error("Select a note, stack, tasks, or calendar first");
-      return;
+    if (packed.items.length === 0) {
+      packed = {
+        items: [
+          {
+            type: "NOTE",
+            id: "00000000-0000-0000-0000-000000000000",
+            title: "No active context",
+            content: "",
+            source: "active_tab",
+          }
+        ],
+        packedAt: new Date(),
+        totalItems: 0
+      };
     }
 
     // Build extras FormData — carries optional context payload for fallback path
     const extras = new FormData();
-    extras.append("contextType", contextType);
-    extras.append("contextId", contextId as string);
+    const primary = packed.items[0];
+    extras.append("contextType", primary.type);
+    extras.append("contextId", primary.id);
     extras.append("cursorPosition", cursorPosition.toString());
 
-    if (contextType === "NOTE" && currentNoteId) {
+    if (primary.type === "NOTE" && currentNoteId && primary.id !== "00000000-0000-0000-0000-000000000000") {
       extras.append("note_state", noteCache[currentNoteId]?.content ?? "");
-    } else if (contextType === "STACK" && currentStackId) {
+    } else if (primary.type === "STACK" && currentStackId && primary.id !== "00000000-0000-0000-0000-000000000000") {
       const stack = stacks.find((s) => s.id === currentStackId);
       if (stack) extras.append("dynamic_schema", JSON.stringify(stack.columns));
-    } else if (contextType === "TASK" && currentFocusedTaskId) {
+    } else if (primary.type === "TASK" && currentFocusedTaskId && primary.id !== "00000000-0000-0000-0000-000000000000") {
       const allTasks = [...tasks, ...Object.values(taskChildrenMap).flat()];
       const focused = allTasks.find((t) => t.id === currentFocusedTaskId);
       if (focused) {
@@ -204,7 +345,7 @@ export default function PushToTalk() {
 
     setIsRecording(true);
     setRecordingTranscript(""); // Clear previous transcript
-    await start(contextType, contextId as string, extras);
+    await start(primary.type, primary.id, extras);
   }, [
     status, currentNoteId, currentStackId, cursorPosition, openTabs, activeTabId,
     currentFocusedTaskId, tasks, taskChildrenMap, noteCache, stacks,
@@ -293,7 +434,7 @@ export default function PushToTalk() {
           )}
           {recordingTranscript && (
             <p className="text-sm leading-relaxed text-center italic">
-              "{recordingTranscript}"
+              {recordingTranscript}
             </p>
           )}
         </div>

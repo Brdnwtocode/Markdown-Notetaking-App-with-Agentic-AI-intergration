@@ -12,4 +12,7 @@ export {
   type TaskStatus,
   type TaskPriority,
   type CalendarEvent,
+  type MutationStatus,
+  type PendingMutationSlice,
+  type PendingMutation,
 } from "../lib/store";

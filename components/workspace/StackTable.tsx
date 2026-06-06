@@ -95,25 +95,8 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
   const resizeColumnIdRef = useRef<string | null>(null);
   const resizeStartWidthRef = useRef(0);
   
-  const { notes, pendingAction, commitPendingAction, clearPendingAction } = useWorkspaceStore();
+  const { notes, pendingMutation, confirmMutation, discardMutation, setFocusedRow, setFocusedColumn } = useWorkspaceStore();
   const router = useRouter();
-
-  // Handle keyboard events for AI confirmation gate
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (pendingAction?.type === "add_stack_row" && pendingAction.stackId === stackId) {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          commitPendingAction();
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          clearPendingAction();
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pendingAction, stackId, commitPendingAction, clearPendingAction]);
 
   // Mark as dirty when any changes happen
   useEffect(() => {
@@ -806,15 +789,25 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                 {groupRows.map((row) => (
                   <tr
                     key={row.id}
-                    className={`${showGridLines ? "border-b border-zinc-800/30" : ""} hover:bg-white/[0.02] group`}
+                    className={`${showGridLines ? "border-b border-zinc-800/30" : ""} hover:bg-white/[0.02] group ${
+                      row.id === useWorkspaceStore.getState().focusedRowId ? "bg-white/[0.05]" : ""
+                    }`}
+                    onClick={() => {
+                      setFocusedRow(row.id);
+                    }}
                   >
                     {columns.map((col) => (
                       <td
                         key={`${row.id}-${col.id}`}
                         className={`px-3 py-1.5 ${
                           showGridLines ? "border-r border-zinc-700/30" : ""
-                        }`}
+                        } ${row.id === useWorkspaceStore.getState().focusedRowId && col.id === useWorkspaceStore.getState().focusedColumnId ? "ring-2 ring-blue-500/50" : ""}`}
                         style={{ width: columnWidths[col.id] || 180 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFocusedRow(row.id);
+                          setFocusedColumn(col.id);
+                        }}
                       >
                         {col.type === "BOOLEAN" ? (
                           <input
@@ -910,7 +903,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
             ))}
             
             {/* AI Confirmation Gate Row */}
-            {pendingAction?.type === "add_stack_row" && pendingAction.stackId === stackId && (
+            {pendingMutation?.type === "add_stack_row" && pendingMutation.stackId === stackId && (
               <tr className="bg-yellow-900/30 border-y border-yellow-700/50 group relative">
                 {columns.map((col, index) => (
                   <td
@@ -930,11 +923,11 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                           AI Suggested
                         </span>
                         <div className="w-px h-4 bg-zinc-700"></div>
-                        <button onClick={commitPendingAction} className="text-xs text-slate-300 hover:text-white flex items-center gap-1">
-                          Accept <span className="bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded text-[10px] text-slate-400 font-mono">↵ Enter</span>
+                        <button onClick={() => confirmMutation()} className="text-xs text-slate-300 hover:text-white flex items-center gap-1 font-medium">
+                          Accept
                         </button>
-                        <button onClick={clearPendingAction} className="text-xs text-slate-300 hover:text-white flex items-center gap-1">
-                          Discard <span className="bg-zinc-800 border border-zinc-700 px-1.5 py-0.5 rounded text-[10px] text-slate-400 font-mono">Esc</span>
+                        <button onClick={discardMutation} className="text-xs text-slate-300 hover:text-white flex items-center gap-1 font-medium">
+                          Discard
                         </button>
                       </div>
                     )}
@@ -942,17 +935,41 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                       {col.type === "BOOLEAN" ? (
                         <input
                           type="checkbox"
-                          checked={!!pendingAction.data[col.id]}
+                          checked={!!pendingMutation.data[col.id]}
                           readOnly
                           className="rounded h-4 w-4 opacity-70"
                         />
                       ) : (
-                        String(pendingAction.data[col.id] ?? "")
+                        String(pendingMutation.data[col.id] ?? "")
                       )}
                     </div>
                   </td>
                 ))}
                 <td className="px-3 py-1.5"></td>
+              </tr>
+            )}
+            
+            {/* AI Confirmation Gate for Bulk Update */}
+            {pendingMutation?.type === "bulk_update_stack" && pendingMutation.stackId === stackId && (
+              <tr className="bg-blue-900/30 border-y border-blue-700/50 group relative">
+                <td colSpan={columns.length + 1} className="px-3 py-3">
+                  <div className="bg-zinc-900 border border-blue-700/50 shadow-lg rounded-md px-4 py-2.5 flex items-center gap-4">
+                    <span className="text-xs font-medium text-blue-500 flex items-center gap-1.5">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                      </span>
+                      AI Suggested Bulk Update ({pendingMutation.updates.length} row(s))
+                    </span>
+                    <div className="w-px h-4 bg-zinc-700"></div>
+                    <button onClick={() => confirmMutation()} className="text-xs text-slate-300 hover:text-white flex items-center gap-1 font-medium">
+                      Accept
+                    </button>
+                    <button onClick={discardMutation} className="text-xs text-slate-300 hover:text-white flex items-center gap-1 font-medium">
+                      Discard
+                    </button>
+                  </div>
+                </td>
               </tr>
             )}
           </tbody>

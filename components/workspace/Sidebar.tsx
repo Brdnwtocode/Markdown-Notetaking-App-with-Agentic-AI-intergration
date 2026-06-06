@@ -24,7 +24,7 @@ import SchemaBuilder, {
 } from "@/components/workspace/SchemaBuilder";
 import axios from "axios";
 import toast from "react-hot-toast";
-import { Plus, LogOut, Database, PanelLeftOpen, PanelLeftClose, FileText, Table2, Search, ArrowUpAZ, ArrowDownAZ, Calendar, Filter, CheckSquare, CalendarDays } from "lucide-react";
+import { Plus, LogOut, Database, PanelLeftOpen, PanelLeftClose, FileText, Table2, Search, ArrowUpAZ, ArrowDownAZ, Calendar, Filter, CheckSquare, CalendarDays, MessageSquare } from "lucide-react";
 import { TASKS_TAB_ID, CALENDAR_TAB_ID } from "@/lib/constants";
 
 
@@ -48,6 +48,8 @@ export default function Sidebar() {
     currentStackId,
     optimisticCreateNote,
     openTab,
+    isChatOpen,
+    setIsChatOpen,
   } = useWorkspaceStore();
 
   useEffect(() => {
@@ -227,6 +229,15 @@ export default function Sidebar() {
               title="Calendar"
           >
             <CalendarDays className="h-5 w-5 text-slate-400" />
+          </Button>
+          <Button
+              size="icon"
+              variant="ghost"
+              onClick={() => setIsChatOpen(!isChatOpen)}
+              className={`h-10 w-10 rounded hover:bg-white/5 ${isChatOpen ? 'bg-purple-600/20 text-purple-400' : ''}`}
+              title="AI Chat"
+          >
+            <MessageSquare className={`h-5 w-5 ${isChatOpen ? 'text-purple-400' : 'text-slate-400'}`} />
           </Button>
           <div className="flex-1" />
           <Button

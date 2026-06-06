@@ -1,85 +1,71 @@
 import { StateCreator } from "zustand";
 import { RootStore } from "@/lib/store";
 
-export type PendingAction = {
-  type: "add_stack_row";
-  stackId: string;
-  data: Record<string, any>;
-} | {
-  type: "update_note";
-  noteId: string;
-  updatedData: { content: string; title?: string; id: string };
-} | {
-  type: "create_task";
-  data: {
-    title: string;
-    description?: string;
-    status?: "TODO" | "IN_PROGRESS" | "DONE";
-    priority?: "LOW" | "MEDIUM" | "HIGH";
-    assignee?: string | null;
-    dueDate?: string | null;
-    parentId?: string | null;
-  };
-} | {
-  type: "create_calendar_event";
-  data: {
-    title: string;
-    notes?: string;
-    startAt: string;
-    endAt: string;
-    allDay?: boolean;
-    color?: string;
-  };
-} | null;
+export type MessageStatus = "pending" | "processing" | "completed" | "error";
+
+export type MessageContextItem = {
+  type: "NOTE" | "STACK" | "TASK" | "CALENDAR" | "TASKS";
+  id: string;
+  title?: string;
+  source?: "active_tab" | "user_mention" | "recent_activity";
+};
+
+export type MessageContext = {
+  items: MessageContextItem[];
+  packedAt?: Date;
+  totalItems: number;
+};
+
+export type ChatMessage = {
+  id: string;
+  type: "user" | "ai";
+  content: string;
+  context?: MessageContext;
+  status: MessageStatus;
+  timestamp: Date;
+};
 
 export interface AiSlice {
-  // AI Conversational UI
+  // AI Conversational UI (legacy)
   aiReply: string | null;
   setAiReply: (reply: string | null) => void;
-  pendingAction: PendingAction;
-  setPendingAction: (action: PendingAction) => void;
-  commitPendingAction: () => void;
-  clearPendingAction: () => void;
-}
+  
+  // Chat UI (new)
+  isChatOpen: boolean;
+  setIsChatOpen: (open: boolean) => void;
+  chatMessages: ChatMessage[];
+  addChatMessage: (message: Omit<ChatMessage, "id" | "timestamp">) => string;
+  updateChatMessage: (id: string, updates: Partial<ChatMessage>) => void;
+  clearChatMessages: () => void;
+};
 
 export const createAiSlice: StateCreator<RootStore, [], [], AiSlice> = (set, get) => ({
-  // AI Conversational UI
+  // AI Conversational UI (legacy)
   aiReply: null,
   setAiReply: (reply) => set({ aiReply: reply }),
-  pendingAction: null,
-  setPendingAction: (action) => set({ pendingAction: action }),
-  commitPendingAction: () => {
-    const { pendingAction, optimisticAddStackRow, optimisticPatchNote } = get();
-    if (pendingAction?.type === "add_stack_row") {
-      optimisticAddStackRow(pendingAction.stackId, pendingAction.data);
-    } else if (pendingAction?.type === "update_note") {
-      optimisticPatchNote(pendingAction.noteId, {
-        content: pendingAction.updatedData.content,
-        title: pendingAction.updatedData.title,
-      });
-    } else if (pendingAction?.type === "create_task") {
-      const d = pendingAction.data;
-      get().optimisticCreateTask({
-        title: d.title,
-        description: d.description ?? "",
-        status: d.status ?? "TODO",
-        priority: d.priority ?? "MEDIUM",
-        assignee: d.assignee ?? null,
-        dueDate: d.dueDate ?? null,
-        parentId: d.parentId ?? null,
-      });
-    } else if (pendingAction?.type === "create_calendar_event") {
-      const d = pendingAction.data;
-      get().optimisticCreateCalendarEvent({
-        title: d.title,
-        notes: d.notes ?? "",
-        startAt: d.startAt,
-        endAt: d.endAt,
-        allDay: d.allDay ?? false,
-        color: d.color ?? "#5645d4",
-      });
-    }
-    set({ pendingAction: null, aiReply: null });
+  
+  // Chat UI (new)
+  isChatOpen: false,
+  setIsChatOpen: (open) => set({ isChatOpen: open }),
+  chatMessages: [],
+  addChatMessage: (message) => {
+    const id = Date.now().toString() + Math.random().toString(36).substr(2, 9);
+    set((state) => ({
+      chatMessages: [
+        ...state.chatMessages,
+        {
+          ...message,
+          id,
+          timestamp: new Date(),
+        },
+      ],
+    }));
+    return id;
   },
-  clearPendingAction: () => set({ pendingAction: null }),
+  updateChatMessage: (id, updates) => set((state) => ({
+    chatMessages: state.chatMessages.map((msg) =>
+      msg.id === id ? { ...msg, ...updates } : msg
+    ),
+  })),
+  clearChatMessages: () => set({ chatMessages: [] }),
 });

@@ -36,6 +36,12 @@ export interface StacksSlice {
   deleteStack: (id: string) => void;
   setStacks: (stacks: Stack[]) => void;
 
+  // Focus tracking for precision edits
+  focusedRowId: string | null;
+  focusedColumnId: string | null;
+  setFocusedRow: (rowId: string | null) => void;
+  setFocusedColumn: (columnId: string | null) => void;
+
   optimisticRenameStack: (stackId: string, name: string) => void;
   optimisticAddStackRow: (
     stackId: string,
@@ -67,6 +73,12 @@ export const createStacksSlice: StateCreator<RootStore, [], [], StacksSlice> = (
   deleteStack: (id) =>
     set((state) => ({ stacks: state.stacks.filter((s) => s.id !== id) })),
   setStacks: (stacks) => set({ stacks }),
+
+  // Focus tracking
+  focusedRowId: null,
+  focusedColumnId: null,
+  setFocusedRow: (rowId) => set({ focusedRowId: rowId }),
+  setFocusedColumn: (columnId) => set({ focusedColumnId: columnId }),
 
   optimisticRenameStack: (stackId, name) => {
     const snapshot = get();
