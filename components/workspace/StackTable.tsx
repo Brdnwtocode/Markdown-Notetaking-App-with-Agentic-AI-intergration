@@ -94,9 +94,20 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
   const resizeStartXRef = useRef(0);
   const resizeColumnIdRef = useRef<string | null>(null);
   const resizeStartWidthRef = useRef(0);
+  const dragColumnRef = useRef<string | null>(null);
   
-  const { notes, pendingMutation, confirmMutation, discardMutation, setFocusedRow, setFocusedColumn } = useWorkspaceStore();
+  const { notes, pendingMutation, confirmMutation, discardMutation, setFocusedRow, setFocusedColumn, updateStack } = useWorkspaceStore();
   const router = useRouter();
+
+  // Sync local rows/columns to the Zustand store so ContextPacker
+  // always has the latest data (even unsaved edits).
+  const syncStackToStore = (cols: StackColumn[], rws: StackRow[]) => {
+    const storeStack = useWorkspaceStore.getState().stacks.find((s) => s.id === stackId);
+    if (!storeStack) return;
+    // Shallow compare to avoid unnecessary store updates
+    if (storeStack.columns === cols && storeStack.rows === rws) return;
+    updateStack({ ...storeStack, columns: cols, rows: rws });
+  };
 
   // Mark as dirty when any changes happen
   useEffect(() => {
@@ -170,22 +181,30 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
       stackId,
       name: "New Column",
       type: type as any,
+      order: columns.length, // append to end
     };
-    setColumns([...columns, newColumn]);
+    const newColumns = [...columns, newColumn];
 
     // Initialize empty data for existing rows
-    setRows(rows.map((row) => ({
+    const newRows = rows.map((row) => ({
       ...row,
       data: { ...row.data, [newColumn.id]: type === "TEXT" || type === "RELATION" ? "" : null },
-    })));
+    }));
+
+    setColumns(newColumns);
+    setRows(newRows);
+    syncStackToStore(newColumns, newRows);
   };
 
   const deleteColumn = (columnId: string) => {
-    setColumns(columns.filter((col) => col.id !== columnId));
-    setRows(rows.map((row) => {
+    const newColumns = columns.filter((col) => col.id !== columnId);
+    const newRows = rows.map((row) => {
       const { [columnId]: _, ...restData } = row.data;
       return { ...row, data: restData };
-    }));
+    });
+    setColumns(newColumns);
+    setRows(newRows);
+    syncStackToStore(newColumns, newRows);
     // Clear sort/filter/group for deleted column
     if (sortConfig?.columnId === columnId) {
       setSortConfig(null);
@@ -198,15 +217,19 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
   };
 
   const updateColumnName = (columnId: string, newName: string) => {
-    setColumns(columns.map((col) =>
+    const newColumns = columns.map((col) =>
       col.id === columnId ? { ...col, name: newName || "Untitled Column" } : col
-    ));
+    );
+    setColumns(newColumns);
+    syncStackToStore(newColumns, rows);
   };
 
   const updateColumnType = (columnId: string, newType: ColumnType) => {
-    setColumns(columns.map((col) =>
+    const newColumns = columns.map((col) =>
       col.id === columnId ? { ...col, type: newType as any } : col
-    ));
+    );
+    setColumns(newColumns);
+    syncStackToStore(newColumns, rows);
   };
 
   const addRow = () => {
@@ -226,17 +249,63 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
       stackId,
       data: newData,
     };
-    setRows([...rows, newRow]);
+    const newRows = [...rows, newRow];
+    setRows(newRows);
+    syncStackToStore(columns, newRows);
   };
 
   const deleteRow = (rowId: string) => {
-    setRows(rows.filter((row) => row.id !== rowId));
+    const newRows = rows.filter((row) => row.id !== rowId);
+    setRows(newRows);
+    syncStackToStore(columns, newRows);
   };
 
   const updateCell = (rowId: string, columnId: string, value: any) => {
-    setRows(rows.map((row) =>
+    const newRows = rows.map((row) =>
       row.id === rowId ? { ...row, data: { ...row.data, [columnId]: value } } : row
-    ));
+    );
+    setRows(newRows);
+    syncStackToStore(columns, newRows);
+  };
+
+  // ─── Column drag-and-drop reordering ──────────────────────────────────
+
+  const handleDragStart = (e: React.DragEvent, columnId: string) => {
+    dragColumnRef.current = columnId;
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", columnId);
+    // Make the dragged element slightly transparent
+    (e.currentTarget as HTMLElement).style.opacity = "0.4";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  };
+
+  const handleDrop = (e: React.DragEvent, targetColumnId: string) => {
+    e.preventDefault();
+    const draggedId = dragColumnRef.current;
+    if (!draggedId || draggedId === targetColumnId) return;
+
+    const fromIndex = columns.findIndex((c) => c.id === draggedId);
+    const toIndex = columns.findIndex((c) => c.id === targetColumnId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const reordered = [...columns];
+    const [moved] = reordered.splice(fromIndex, 1);
+    reordered.splice(toIndex, 0, moved);
+
+    // Reassign order numbers based on new positions
+    const finalColumns = reordered.map((col, i) => ({ ...col, order: i }));
+    setColumns(finalColumns);
+    syncStackToStore(finalColumns, rows);
+    dragColumnRef.current = null;
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    (e.currentTarget as HTMLElement).style.opacity = "1";
+    dragColumnRef.current = null;
   };
 
   const handleRelationClick = (value: string) => {
@@ -506,6 +575,11 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
               {columns.map((col) => (
                 <th
                   key={col.id}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, col.id)}
+                  onDragOver={handleDragOver}
+                  onDrop={(e) => handleDrop(e, col.id)}
+                  onDragEnd={handleDragEnd}
                   className={`text-left text-sm font-medium text-slate-300 select-none relative ${
                     showGridLines ? "border-r border-zinc-700/30" : ""
                   }`}

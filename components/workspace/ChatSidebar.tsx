@@ -6,7 +6,9 @@ import { X, Sparkles, Send, Mic, ChevronDown, ChevronUp, Loader2 } from "lucide-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWorkspaceStore } from "@/lib/store";
-import { ContextPacker, extractMentions } from "@/lib/context/packer";
+import { packContext } from "@/lib/voice/contextHelpers";
+import { buildVoiceFormData, getFormDataContext } from "@/lib/voice/buildFormData";
+import { handleResponseActions } from "@/lib/voice/handleResponseActions";
 import ReactMarkdown from "react-markdown";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -21,16 +23,13 @@ export default function ChatSidebar() {
     updateChatMessage,
     currentNoteId,
     currentStackId,
-    openTabs,
-    activeTabId,
-    openTab,
+    cursorPosition,
     currentFocusedTaskId,
     tasks,
     taskChildrenMap,
     noteCache,
     stacks,
     setIsVoiceMutating,
-    stageMutation,
     setAiReply,
   } = useWorkspaceStore();
 
@@ -44,45 +43,20 @@ export default function ChatSidebar() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  // Get current context using ContextPacker (modular)
-  const getCurrentContext = useCallback(async (content?: string) => {
-    const store = useWorkspaceStore.getState();
-    const packer = new ContextPacker(store);
-    
-    // Collect tab IDs to pack
-    const tabIds = store.selectedTabIds.length > 0 
-      ? store.selectedTabIds 
-      : (store.activeTabId ? [store.activeTabId] : []);
-    
-    // Extract @mentions from content if provided
-    const mentions = content ? extractMentions(content) : [];
-    
-    // Pack context with transcript for command detection
-    const packed = await packer.pack({
-      tabIds,
-      mentions: mentions.length > 0 ? mentions : undefined,
-      transcript: content, // Pass content for command type detection
-    });
-    
-    return packed;
-  }, []);
-
   // Send message to API
   const sendMessage = useCallback(
     async (content: string) => {
-      // Get packed context using ContextPacker
-      const packedContext = await getCurrentContext(content);
+      // 1. Pack context
+      const packedContext = await packContext(content);
 
-      // Add user message with packed context
+      // 2. Add user message
       addChatMessage({
         type: "user",
         content,
         context: {
           items: packedContext.items.map((item: any) => ({
-            type: item.type,
-            id: item.id,
-            title: item.title,
-            source: item.source,
+            type: item.type, id: item.id,
+            title: item.title, source: item.source,
           })),
           packedAt: packedContext.packedAt,
           totalItems: packedContext.totalItems,
@@ -90,147 +64,59 @@ export default function ChatSidebar() {
         status: "completed",
       });
 
-      // Add AI processing message and get its ID
+      // 3. Add AI placeholder
       const aiMsgId = addChatMessage({
-        type: "ai",
-        content: "",
-        status: "processing",
+        type: "ai", content: "", status: "processing",
       });
 
       setIsProcessing(true);
       setIsVoiceMutating(true);
 
       try {
-        const form = new FormData();
-        form.append("transcript", content);
-        
-        // Send packed context as JSON
-        form.append("packed_context", JSON.stringify(packedContext));
-
-        // For backward compatibility, also send primary context
-        if (packedContext.items.length > 0) {
-          const primary = packedContext.items[0];
-          form.append("contextType", primary.type);
-          form.append("contextId", primary.id);
-          form.append("cursorPosition", cursorPosition.toString()); // Fix: use actual cursor position
-
-          if (primary.type === "NOTE" && currentNoteId) {
-            form.append("note_state", noteCache[currentNoteId]?.content || "");
-          } else if (primary.type === "STACK" && currentStackId) {
-            const stack = stacks.find((s) => s.id === currentStackId);
-            if (stack)
-              form.append("dynamic_schema", JSON.stringify(stack.columns));
-          } else if (primary.type === "TASK" && currentFocusedTaskId) {
-            const allTasks = [...tasks, ...Object.values(taskChildrenMap).flat()];
-            const focused = allTasks.find((t) => t.id === currentFocusedTaskId);
-            if (focused)
-              form.append(
-                "task_context",
-                JSON.stringify({
-                  focusedTaskId: focused.id,
-                  focusedTaskTitle: focused.title,
-                })
-              );
-          }
-        }
+        // 4. Build & send FormData
+        const form = buildVoiceFormData(content, packedContext, getFormDataContext());
 
         const res = await axios.post("/api/voice/process", form, {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
-        const { action, updatedData, aiReply } = res.data;
-
-        let replyContent = aiReply || "Done!";
-
-        if (action && updatedData) {
-          if (action === "update_note") {
-            // Use the note ID returned by the AI, fall back to currentNoteId
-            const noteId: string = updatedData?.id || currentNoteId;
-            if (!noteId) {
-              replyContent = "AI suggested edits but no note is open to display them.";
-            } else {
-              const noteTitle = updatedData?.title || noteCache[noteId]?.title || "Note";
-              // Auto-open the note tab so the diff overlay is visible
-              openTab(noteId, "NOTE", noteTitle);
-              stageMutation({
-                type: "update_note",
-                noteId,
-                originalContent: noteCache[noteId]?.content || "",
-                updatedData,
-              });
-              replyContent = `AI suggested edits to "${noteTitle}".\n\nReview the highlighted diff and click **Accept** to save or **Discard** to revert.`;
-            }
-          } else if (action === "add_stack_row") {
-            const stackId: string = updatedData?.stackId || currentStackId;
-            if (!stackId) {
-              replyContent = "AI suggested a new row but no stack is open to display it.";
-            } else {
-              const stack = stacks.find((s: any) => s.id === stackId);
-              const stackName = stack?.name || "Stack";
-              openTab(stackId, "STACK", stackName);
-              stageMutation({
-                type: "add_stack_row",
-                stackId,
-                data: updatedData,
-              });
-              replyContent = `AI suggested a new row in "${stackName}".\n\nReview the highlighted ghost row and click **Accept** to save or **Discard** to revert.`;
-            }
-          } else if (action === "create_task") {
-            stageMutation({ type: "create_task", data: updatedData });
-            replyContent = `AI suggested a new task: "${updatedData?.title || "Untitled"}".\n\nReview and click **Accept** to save or **Discard** to revert.`;
-          } else if (action === "create_calendar_event") {
-            stageMutation({ type: "create_calendar_event", data: updatedData });
-            replyContent = `AI suggested a new calendar event: "${updatedData?.title || "Untitled"}".\n\nReview and click **Accept** to save or **Discard** to revert.`;
-          }
-        }
-
-        // Update AI message with the appropriate reply
-        updateChatMessage(aiMsgId, {
-          content: replyContent,
-          status: "completed",
+        // 5. Handle response
+        const replyContent = handleResponseActions(res.data, {
+          currentNoteId,
+          currentStackId,
+          currentFocusedTaskId,
+          noteCache,
+          stacks,
+          tasks,
+          taskChildrenMap,
+          originalContent: "",
         });
 
-        if (aiReply) setAiReply(aiReply);
+        updateChatMessage(aiMsgId, { content: replyContent, status: "completed" });
+        if (res.data.aiReply) setAiReply(res.data.aiReply);
       } catch (error) {
         console.error("Chat message failed:", error);
-        
-        let displayMessage = "Failed to process message. Please try again.";
+
+        let msg = "Failed to process message. Please try again.";
         if (axios.isAxiosError(error)) {
           const apiError = error.response?.data?.error;
           if (apiError === "Command not recognized as a workspace action.") {
-            displayMessage = "Command not recognized as a workspace action. Please clarify your request and try again.";
+            msg = "Command not recognized as a workspace action. Please clarify your request and try again.";
           } else if (typeof apiError === "string" && apiError.trim() !== "") {
-            displayMessage = apiError;
+            msg = apiError;
           }
         }
 
-        updateChatMessage(aiMsgId, {
-          content: displayMessage,
-          status: "error",
-        });
-
-        toast.error(displayMessage);
+        updateChatMessage(aiMsgId, { content: msg, status: "error" });
+        toast.error(msg);
       } finally {
         setIsProcessing(false);
         setIsVoiceMutating(false);
       }
     },
-    [
-      addChatMessage,
-      updateChatMessage,
-      getCurrentContext,
-      currentNoteId,
-      currentStackId,
-      currentFocusedTaskId,
-      tasks,
-      taskChildrenMap,
-      noteCache,
-      stacks,
-      setIsVoiceMutating,
-      openTab,
-      stageMutation,
-      setAiReply,
-    ]
+    [addChatMessage, updateChatMessage, currentNoteId, currentStackId,
+     currentFocusedTaskId, cursorPosition, tasks, taskChildrenMap,
+     noteCache, stacks, setIsVoiceMutating, setAiReply]
   );
 
   // Handle text input submit

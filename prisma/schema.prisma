@@ -121,8 +121,9 @@ model StackColumn {
   stackId String
   stack   Stack    @relation(fields: [stackId], references: [id], onDelete: Cascade)
 
-  name String
-  type DataType?
+  name  String
+  type  DataType?
+  order Int      @default(0)
 }
 
 model StackRow {

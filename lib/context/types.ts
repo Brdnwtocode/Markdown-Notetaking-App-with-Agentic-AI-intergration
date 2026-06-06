@@ -1,18 +1,12 @@
 // lib/context/types.ts
 // Type definitions for the Context Grabber system
+//
+// Note: CommandType and FocusedTarget were removed — intent detection
+// is now handled by the AI model on the FastAPI side, not client-side.
 
 export type ContextSource = "active_tab" | "user_mention" | "recent_activity";
 
 export type TabType = "NOTE" | "STACK" | "TASKS" | "CALENDAR";
-
-export type CommandType = 
-  | "precision_edit"   // Single cell/row edit (minimal context)
-  | "add_item"         // Add new row/task/event
-  | "delete_item"       // Delete row/task/event
-  | "summarize"        // Summarize data (needs full data)
-  | "insight"          // Find insights (needs full data)
-  | "bulk_update"      // Update multiple items
-  | "unknown";
 
 export type DataFormat = "json" | "csv" | "markdown";
 
@@ -37,12 +31,4 @@ export interface ContextPackerOptions {
   includeMetadata?: boolean;
   dataFormat?: DataFormat;  // csv, markdown, or json
   maxRowsForFullData?: number;  // Limit rows for full data mode
-}
-
-export interface FocusedTarget {
-  rowId?: string;
-  columnId?: string;
-  currentValue?: any;
-  rowIndex?: number;
-  columnIndex?: number;
 }

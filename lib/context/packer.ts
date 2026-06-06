@@ -1,63 +1,50 @@
 // lib/context/packer.ts
-// Main ContextPacker class - modular and maintainable
+// Main ContextPacker class — packs workspace context for AI processing.
+// Only handles data FORMATTING (CSV/Markdown/JSON), NOT meaning/intent detection.
+// Intent detection is left entirely to the AI model on the FastAPI side.
 
 import { RootStore } from "@/lib/store";
 import { 
   ContextItem, 
   PackedContext, 
   ContextPackerOptions, 
-  CommandType, 
   DataFormat,
-  FocusedTarget 
 } from "./types";
-import { 
-  detectCommandType, 
-  needsFullData, 
-  needsPrecisionContext, 
-  needsSchemaOnly 
-} from "./commandDetector";
 import { formatData } from "./dataFormatter";
 
 const DEFAULT_OPTIONS: ContextPackerOptions = {
   maxItems: 5,
   includeContent: true,
   includeMetadata: true,
-  dataFormat: "csv", // Default to CSV (most compact)
-  maxRowsForFullData: 100, // Limit rows for full data mode
+  dataFormat: "csv", // Default to CSV (most compact for AI token usage)
+  maxRowsForFullData: 100,
 };
 
 export class ContextPacker {
   private store: RootStore;
-  private commandType: CommandType = "unknown";
-  private transcript: string = "";
 
   constructor(store: RootStore) {
     this.store = store;
   }
 
   /**
-   * Pack context from multiple sources
-   * @param options - Packing options
-   * @param packerOptions - Context packer options
+   * Pack context from multiple sources.
+   * Always includes full data — no command-type-based filtering.
+   * The AI is responsible for understanding user intent.
    */
   async pack(
     options: {
       tabIds?: string[];
       mentions?: string[];
       includeRecent?: boolean;
-      transcript?: string; // Add transcript for command detection
+      /** Accept transcript for API compatibility but no longer used for intent detection */
+      transcript?: string;
     },
     packerOptions?: ContextPackerOptions
   ): Promise<PackedContext> {
     const opts = { ...DEFAULT_OPTIONS, ...packerOptions };
     const items: ContextItem[] = [];
     const seenIds = new Set<string>();
-
-    // Store transcript and detect command type
-    this.transcript = options.transcript || "";
-    this.commandType = this.transcript 
-      ? detectCommandType(this.transcript) 
-      : "unknown";
 
     // 1. Pack from selected tabs
     if (options.tabIds && options.tabIds.length > 0) {
@@ -185,8 +172,8 @@ export class ContextPacker {
   }
 
   /**
-   * Build a ContextItem for a given type and ID
-   * This is where the dual-mode logic happens
+   * Build a ContextItem for a given type and ID.
+   * ALWAYS includes full data — the AI decides what's relevant.
    */
   private async buildContextItem(
     type: string,
@@ -195,7 +182,7 @@ export class ContextPacker {
     source: "active_tab" | "user_mention" | "recent_activity",
     opts: ContextPackerOptions
   ): Promise<ContextItem | null> {
-    const { noteCache, stacks, tasks, taskChildrenMap } = this.store;
+    const { noteCache, stacks, tasks, taskChildrenMap, calendarEvents, cursorPosition } = this.store;
 
     const base: ContextItem = {
       type: type as any,
@@ -213,7 +200,7 @@ export class ContextPacker {
           // NOTES: Always send content (they're small)
           base.content = note.content || "";
           base.metadata = {
-            cursorPosition: this.store.cursorPosition,
+            cursorPosition,
             title: note.title,
           };
           break;
@@ -223,62 +210,32 @@ export class ContextPacker {
           const stack = stacks.find((s) => s.id === id);
           if (!stack) return null;
 
-          // Determine packing strategy based on command type
-          if (needsFullData(this.commandType)) {
-            // MODE 2: Full data (summarization/insights)
-            const rows = (stack.rows || []).slice(0, opts.maxRowsForFullData);
-            const formattedData = formatData(
-              "stack",
-              rows,
-              opts.dataFormat || "csv",
-              stack.columns
-            );
+          // Strip redundant stackId and sort by order (user-arranged column order)
+          const cleanColumns = stack.columns
+            .map(({ stackId, ...col }: any) => col)
+            .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+          const rows = (stack.rows || []).slice(0, opts.maxRowsForFullData);
+          const formattedData = formatData(
+            "stack",
+            rows,
+            opts.dataFormat || "csv",
+            cleanColumns
+          );
 
-            base.content = {
-              schema: { columns: stack.columns },
-              stats: {
-                rowCount: stack.rows?.length || 0,
-                columnCount: stack.columns?.length || 0,
-              },
-              dataFormat: opts.dataFormat || "csv",
-              data: formattedData, // CSV or Markdown (compact!)
-            };
+          base.content = {
+            schema: { columns: cleanColumns },
+            stats: {
+              rowCount: stack.rows?.length || 0,
+              columnCount: cleanColumns.length,
+            },
+            dataFormat: opts.dataFormat || "csv",
+            data: formattedData,
+          };
 
-            base.metadata = {
-              commandType: this.commandType,
-              editMode: "full_data",
-              dataFormat: opts.dataFormat || "csv",
-            };
-          } else if (needsPrecisionContext(this.commandType)) {
-            // MODE 1: Precision edit (single cell/row)
-            base.content = {
-              schema: { columns: stack.columns },
-              stats: {
-                rowCount: stack.rows?.length || 0,
-                columnCount: stack.columns?.length || 0,
-              },
-              focusedTarget: this.getFocusedTarget(stack),
-            };
-
-            base.metadata = {
-              commandType: this.commandType,
-              editMode: "single_cell",
-            };
-          } else {
-            // Default: Schema only (for add_row, etc.)
-            base.content = {
-              schema: { columns: stack.columns },
-              stats: {
-                rowCount: stack.rows?.length || 0,
-                columnCount: stack.columns?.length || 0,
-              },
-            };
-
-            base.metadata = {
-              commandType: this.commandType,
-              editMode: "schema_only",
-            };
-          }
+          base.metadata = {
+            dataFormat: opts.dataFormat || "csv",
+            rowCount: stack.rows?.length || 0,
+          };
           break;
         }
 
@@ -312,9 +269,10 @@ export class ContextPacker {
           // Special case: TASKS tab (no specific task)
           base.type = "TASK";
           base.id = "tasks-overview";
+          const allTasks = [...tasks, ...Object.values(taskChildrenMap).flat()];
           base.metadata = {
-            taskCount: tasks.length,
-            completedCount: tasks.filter((t) => t.status === "DONE").length,
+            taskCount: allTasks.length,
+            completedCount: allTasks.filter((t) => t.status === "DONE").length,
           };
           break;
         }
@@ -323,25 +281,22 @@ export class ContextPacker {
           base.type = "CALENDAR";
           base.id = "calendar-overview";
           
-          // CALENDAR: Send events as CSV/Markdown if needed
-          if (needsFullData(this.commandType)) {
-            const { calendarEvents } = this.store;
-            const formattedData = formatData(
-              "event",
-              calendarEvents,
-              opts.dataFormat || "csv"
-            );
+          // CALENDAR: Always send events as CSV
+          const formattedData = formatData(
+            "event",
+            calendarEvents,
+            opts.dataFormat || "csv"
+          );
 
-            base.content = {
-              dataFormat: opts.dataFormat || "csv",
-              data: formattedData,
-              eventCount: calendarEvents.length,
-            };
-          } else {
-            base.metadata = {
-              eventCount: this.store.calendarEvents.length,
-            };
-          }
+          base.content = {
+            dataFormat: opts.dataFormat || "csv",
+            data: formattedData,
+            eventCount: calendarEvents.length,
+          };
+          
+          base.metadata = {
+            eventCount: calendarEvents.length,
+          };
           break;
         }
 
@@ -354,31 +309,6 @@ export class ContextPacker {
       console.error(`Error building context item for ${type}:${id}`, error);
       return null;
     }
-  }
-
-  /**
-   * Get focused target (row + column) for precision edits
-   */
-  private getFocusedTarget(stack: any): FocusedTarget | undefined {
-    const { focusedRowId, focusedColumnId } = this.store;
-
-    if (!focusedRowId) return undefined;
-
-    const focusedRow = stack.rows?.find((r: any) => r.id === focusedRowId);
-    if (!focusedRow) return undefined;
-
-    const target: FocusedTarget = {
-      rowId: focusedRowId,
-      rowIndex: stack.rows.findIndex((r: any) => r.id === focusedRowId),
-    };
-
-    if (focusedColumnId) {
-      target.columnId = focusedColumnId;
-      target.currentValue = focusedRow.data?.[focusedColumnId];
-      target.columnIndex = stack.columns.findIndex((c: any) => c.id === focusedColumnId);
-    }
-
-    return target;
   }
 }
 

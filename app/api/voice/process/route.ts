@@ -27,7 +27,6 @@ export async function POST(request: NextRequest) {
     const contextId = formData.get("contextId") as string;
     const cursorPosition = formData.get("cursorPosition") as string;
     const noteState = formData.get("note_state") as string;
-    const dynamicSchema = formData.get("dynamic_schema") as string;
     const taskContext = formData.get("task_context") as string | null;
     const packedContextStr = formData.get("packed_context") as string | null;
 
@@ -72,10 +71,8 @@ export async function POST(request: NextRequest) {
     if (noteState) {
       fastApiFormData.append("note_state", noteState);
     }
-    // dynamic_schema: stack column schema (sent when contextType is STACK)
-    if (dynamicSchema) {
-      fastApiFormData.append("dynamic_schema", dynamicSchema);
-    }
+    // Note: dynamic_schema is NOT forwarded separately — it's already inside
+    // packed_context.items[].content.schema.columns when context_type is STACK
     // task_context: focused task context (sent when contextType is TASK)
     if (taskContext) {
       fastApiFormData.append("task_context", taskContext);

@@ -14,7 +14,7 @@ export async function GET() {
     const stacks = await prisma.stack.findMany({
       where: { userId: session.user.id },
       include: {
-        columns: true,
+        columns: { orderBy: { order: "asc" } },
         rows: true,
       },
       orderBy: { updatedAt: "desc" },
@@ -64,14 +64,15 @@ export async function POST(request: NextRequest) {
         userId: session.user.id,
         name,
         columns: {
-          create: columns.map((col) => ({
+          create: columns.map((col, i) => ({
             name: col.name,
             type: col.type,
+            order: i,
           })),
         },
       },
       include: {
-        columns: true,
+        columns: { orderBy: { order: "asc" } },
         rows: true,
       },
     });

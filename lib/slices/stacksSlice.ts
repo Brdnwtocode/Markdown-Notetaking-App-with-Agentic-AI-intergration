@@ -8,6 +8,7 @@ export interface StackColumn {
   stackId: string;
   name: string;
   type: "TEXT" | "INT" | "FLOAT" | "BOOLEAN" | "DATE" | "SELECT" | "FORMULA" | "RELATION";
+  order: number;
 }
 
 export interface StackRow {

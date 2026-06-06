@@ -27,8 +27,7 @@ export interface VoiceProcessRequest {
   // Typed request fields for FastAPI
   /** Current note content when a note is open (sent when contextType is NOTE) */
   note_state?: string | null;
-  /** Stack column schema when a stack is open (sent when contextType is STACK) */
-  dynamic_schema?: string | null;
+  /** Stack column schema is now inside packed_context.items[].content.schema.columns — no separate field needed */
   /** Task context when a task is focused (sent when contextType is TASK) */
   task_context?: string | null;
   

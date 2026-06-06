@@ -6,8 +6,7 @@ export const processVoiceCommand = async (
   contextType: string,
   contextId: string,
   cursorPosition: number,
-  noteState: string | null,
-  dynamicSchema: string | null
+  noteState: string | null
 ): Promise<VoiceResponse> => {
   const formData = new FormData();
   formData.append("audio", audioBlob, "audio.webm");
@@ -22,11 +21,8 @@ export const processVoiceCommand = async (
   if (noteState) {
     formData.append("note_state", noteState);
   }
-  
-  // dynamic_schema: stack column schema when a stack is open
-  if (dynamicSchema && contextType === "STACK") {
-    formData.append("dynamic_schema", dynamicSchema);
-  }
+  // Note: dynamic_schema is no longer sent separately —
+  // stack schema is already inside packed_context.items[].content.schema.columns
 
   const res = await axios.post<VoiceResponse>("/api/voice/process", formData, {
     headers: {

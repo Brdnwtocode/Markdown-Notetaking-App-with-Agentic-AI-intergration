@@ -15,7 +15,7 @@ export async function GET(
   const stack = await prisma.stack.findUnique({
     where: { id: params.id },
     include: {
-      columns: true,
+      columns: { orderBy: { order: "asc" } },
       rows: true,
     },
   });
@@ -75,7 +75,7 @@ export async function PUT(
     rows,
   } = body as {
     name?: string;
-    columns?: Array<{ id?: string; name: string; type: "TEXT" | "INT" | "FLOAT" | "BOOLEAN" }>;
+    columns?: Array<{ id?: string; name: string; type: string; order?: number }>;
     rows?: Array<{ id?: string; data: Record<string, any> }>;
   };
 
@@ -102,24 +102,27 @@ export async function PUT(
         await tx.stackColumn.delete({ where: { id: col.id } });
       }
 
-      // Upsert new/existing columns
-      for (const col of columns) {
+      // Upsert new/existing columns (preserve order from client)
+      for (let i = 0; i < columns.length; i++) {
+        const col = columns[i];
+        const colOrder = col.order ?? i;
         if (col.id && !col.id.startsWith("temp_")) {
-          // Update existing column (only if it's not a temp id)
+          // Update existing column
           try {
             await tx.stackColumn.update({
               where: { id: col.id, stackId: params.id },
-              data: { name: col.name, type: col.type },
+              data: { name: col.name, type: col.type as any, order: colOrder },
             });
           } catch {
             // Ignore if not found
           }
-        } else if (!col.id || col.id.startsWith("temp_")) {
+        } else {
           // Create new column
           await tx.stackColumn.create({
             data: {
               name: col.name,
-              type: col.type,
+              type: col.type as any,
+              order: colOrder,
               stackId: params.id,
             },
           });
@@ -164,10 +167,10 @@ export async function PUT(
       }
     }
 
-    // Fetch updated stack
+    // Fetch updated stack with ordered columns
     return tx.stack.findUnique({
       where: { id: params.id },
-      include: { columns: true, rows: true },
+      include: { columns: { orderBy: { order: "asc" } }, rows: true },
     });
   });
 

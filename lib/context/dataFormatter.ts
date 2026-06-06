@@ -1,67 +1,110 @@
 // lib/context/dataFormatter.ts
-// Formats data into compact formats (CSV, Markdown) for efficient token usage
+// Formats data into compact formats (CSV, Markdown) for efficient token usage.
+// Row IDs are intentionally omitted — the AI works with data, not internal keys.
 
 import { DataFormat } from "./types";
 
+/** Column type values that can appear in a stack schema */
+type ColumnType = "TEXT" | "INT" | "FLOAT" | "BOOLEAN" | "SELECT" | "DATE";
+
 /**
- * Formats stack data as CSV
- * Much more compact than JSON (6-10x smaller)
+ * Format a single cell value based on its declared column type.
+ * Ensures all types are human-readable in the AI context.
+ */
+function formatCellValue(raw: unknown, columnType: ColumnType): string {
+  // Null/undefined → empty
+  if (raw === null || raw === undefined) return "";
+
+  switch (columnType) {
+    case "BOOLEAN":
+      return String(Boolean(raw));
+    case "INT":
+    case "FLOAT": {
+      const n = Number(raw);
+      return isNaN(n) ? String(raw) : String(n);
+    }
+    case "DATE":
+      // If it's already an ISO string, return date portion; otherwise pass through
+      try {
+        const d = new Date(raw as string);
+        if (!isNaN(d.getTime())) return d.toISOString().split("T")[0];
+      } catch { /* fall through */ }
+      return String(raw);
+    case "SELECT":
+    case "TEXT":
+    default:
+      return String(raw);
+  }
+}
+
+// ─── Stack formatters ─────────────────────────────────────────────────────
+
+/**
+ * Build a header label that includes the column type so the AI
+ * can distinguish identically-named columns of different types.
+ * e.g. "New Column (BOOLEAN)" vs "New Column (DATE)"
+ */
+function typedHeader(col: { name: string; type: string }): string {
+  return `${col.name} (${col.type})`;
+}
+
+/**
+ * Formats stack data as CSV.
+ * Header = "ColumnName (TYPE)" so the AI sees the schema.
+ * Each data row = formatted values per column type.
  */
 export function formatStackAsCSV(columns: any[], rows: any[]): string {
-  // Header row
-  const headers = ["id", ...columns.map(c => escapeCSV(c.name))];
+  // Header row — "Name (TYPE)" format
+  const headers = columns.map((c) => escapeCSV(typedHeader(c)));
   const lines = [headers.join(",")];
-  
+
   // Data rows
   for (const row of rows) {
-    const values = [row.id];
-    for (const col of columns) {
-      const value = row.data?.[col.id] ?? "";
-      values.push(escapeCSV(String(value)));
-    }
+    const values = columns.map((col) => {
+      const raw = row.data?.[col.id];
+      return escapeCSV(formatCellValue(raw, col.type as ColumnType));
+    });
     lines.push(values.join(","));
   }
-  
+
   return lines.join("\n");
 }
 
 /**
- * Formats stack data as Markdown table
- * More readable than CSV, still compact
+ * Formats stack data as Markdown table.
+ * Header = "ColumnName (TYPE)".
  */
 export function formatStackAsMarkdown(columns: any[], rows: any[]): string {
-  // Header
-  const headers = ["id", ...columns.map(c => c.name)];
+  const headers = columns.map((c) => typedHeader(c));
   const separator = headers.map(() => "---");
-  
+
   const lines = [
     `| ${headers.join(" | ")} |`,
     `| ${separator.join(" | ")} |`,
   ];
-  
-  // Rows
+
   for (const row of rows) {
-    const values = [row.id];
-    for (const col of columns) {
-      const value = row.data?.[col.id] ?? "";
-      values.push(String(value));
-    }
+    const values = columns.map((col) => {
+      const raw = row.data?.[col.id];
+      return formatCellValue(raw, col.type as ColumnType);
+    });
     lines.push(`| ${values.join(" | ")} |`);
   }
-  
+
   return lines.join("\n");
 }
 
+// ─── Task formatters ──────────────────────────────────────────────────────
+
 /**
- * Formats task data as CSV
+ * Formats task data as CSV (no row id).
  */
 export function formatTasksAsCSV(tasks: any[]): string {
-  const headers = ["id", "title", "description", "status", "priority", "dueDate", "parentId"];
+  const headers = ["title", "description", "status", "priority", "dueDate", "parentId"];
   const lines = [headers.join(",")];
-  
+
   for (const task of tasks) {
     const values = [
-      task.id,
       escapeCSV(task.title),
       escapeCSV(task.description || ""),
       task.status,
@@ -71,25 +114,24 @@ export function formatTasksAsCSV(tasks: any[]): string {
     ];
     lines.push(values.join(","));
   }
-  
+
   return lines.join("\n");
 }
 
 /**
- * Formats task data as Markdown table
+ * Formats task data as Markdown table (no row id).
  */
 export function formatTasksAsMarkdown(tasks: any[]): string {
-  const headers = ["id", "title", "status", "priority", "dueDate"];
+  const headers = ["title", "status", "priority", "dueDate"];
   const separator = headers.map(() => "---");
-  
+
   const lines = [
     `| ${headers.join(" | ")} |`,
     `| ${separator.join(" | ")} |`,
   ];
-  
+
   for (const task of tasks) {
     const values = [
-      task.id,
       task.title,
       task.status,
       task.priority,
@@ -97,20 +139,21 @@ export function formatTasksAsMarkdown(tasks: any[]): string {
     ];
     lines.push(`| ${values.join(" | ")} |`);
   }
-  
+
   return lines.join("\n");
 }
 
+// ─── Calendar event formatters ────────────────────────────────────────────
+
 /**
- * Formats calendar events as CSV
+ * Formats calendar events as CSV (no row id).
  */
 export function formatEventsAsCSV(events: any[]): string {
-  const headers = ["id", "title", "notes", "startAt", "endAt", "allDay", "color"];
+  const headers = ["title", "notes", "startAt", "endAt", "allDay", "color"];
   const lines = [headers.join(",")];
-  
+
   for (const event of events) {
     const values = [
-      event.id,
       escapeCSV(event.title),
       escapeCSV(event.notes || ""),
       new Date(event.startAt).toISOString(),
@@ -120,23 +163,24 @@ export function formatEventsAsCSV(events: any[]): string {
     ];
     lines.push(values.join(","));
   }
-  
+
   return lines.join("\n");
 }
 
+// ─── Utilities ────────────────────────────────────────────────────────────
+
 /**
- * Escapes a value for CSV format
+ * Escapes a value for CSV format.
  */
 function escapeCSV(value: string): string {
-  // If value contains comma, quote, or newline, wrap in quotes
-  if (value.includes(",") || value.includes("\"") || value.includes("\n")) {
-    return `"${value.replace(/"/g, "\"\"")}"`;
+  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+    return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
 }
 
 /**
- * Formats data based on specified format
+ * Formats data based on specified format.
  */
 export function formatData(
   dataType: "stack" | "task" | "event",
@@ -164,7 +208,7 @@ export function formatData(
         return formatEventsAsCSV(data);
     }
   }
-  
+
   // Default to JSON
   return JSON.stringify(data, null, 2);
 }
