@@ -31,16 +31,7 @@ export default function ChatSidebar() {
     stacks,
     setIsVoiceMutating,
     setAiReply,
-    activeTabId,
-    openTabs,
   } = useWorkspaceStore();
-
-  const getCurrentContext = () => {
-    if (!activeTabId) return null;
-    const tab = openTabs.find((t) => t.id === activeTabId);
-    if (!tab) return null;
-    return { type: tab.type, id: tab.id };
-  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState("");

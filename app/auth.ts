@@ -81,7 +81,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt: async ({ token, user, account, trigger }) => {
+    jwt: async ({ token, user, account }) => {
       // On first sign-in (Credentials or OAuth), attach user.id and refresh token
       if (user) {
         token.id = user.id;

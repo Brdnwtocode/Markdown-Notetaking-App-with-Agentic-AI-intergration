@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
         refreshToken: newToken,
       },
       secret: authSecret,
+      salt: authSecret, // required by @auth/core v0.38+
       maxAge: 15 * 60, // 15-minute access token
     });
 
