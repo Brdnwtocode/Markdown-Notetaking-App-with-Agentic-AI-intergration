@@ -10,7 +10,7 @@ import { packContext } from "@/lib/voice/contextHelpers";
 import { buildVoiceFormData, getFormDataContext } from "@/lib/voice/buildFormData";
 import { handleResponseActions } from "@/lib/voice/handleResponseActions";
 import ReactMarkdown from "react-markdown";
-import axios from "axios";
+import { apiClient } from "@/lib/httpClient";
 import toast from "react-hot-toast";
 import { useDeepgramSTT } from "@/lib/hooks/useDeepgramSTT";
 
@@ -31,7 +31,16 @@ export default function ChatSidebar() {
     stacks,
     setIsVoiceMutating,
     setAiReply,
+    activeTabId,
+    openTabs,
   } = useWorkspaceStore();
+
+  const getCurrentContext = () => {
+    if (!activeTabId) return null;
+    const tab = openTabs.find((t) => t.id === activeTabId);
+    if (!tab) return null;
+    return { type: tab.type, id: tab.id };
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [inputText, setInputText] = useState("");
@@ -76,7 +85,7 @@ export default function ChatSidebar() {
         // 4. Build & send FormData
         const form = buildVoiceFormData(content, packedContext, getFormDataContext());
 
-        const res = await axios.post("/api/voice/process", form, {
+        const res = await apiClient.post("/api/voice/process", form, {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
@@ -98,8 +107,8 @@ export default function ChatSidebar() {
         console.error("Chat message failed:", error);
 
         let msg = "Failed to process message. Please try again.";
-        if (axios.isAxiosError(error)) {
-          const apiError = error.response?.data?.error;
+        if (error && typeof error === "object" && "isAxiosError" in error) {
+          const apiError = (error as any).response?.data?.error;
           if (apiError === "Command not recognized as a workspace action.") {
             msg = "Command not recognized as a workspace action. Please clarify your request and try again.";
           } else if (typeof apiError === "string" && apiError.trim() !== "") {
@@ -144,15 +153,15 @@ export default function ChatSidebar() {
 
   return (
     <div
-      className={`fixed top-0 right-0 h-full w-80 md:w-96 bg-[#0b1118] border-l border-white/10 shadow-2xl transition-all duration-300 ease-in-out z-[100] flex flex-col ${
+      className={`fixed top-0 right-0 h-full w-80 md:w-96 bg-[#0E0E0E] border-l border-[#27272A] shadow-2xl transition-all duration-300 ease-in-out z-[100] flex flex-col ${
         isChatOpen ? "translate-x-0" : "translate-x-full"
       }`}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-white/10 bg-[#0a0f16]">
-        <div className="flex items-center gap-2 text-purple-400">
-          <Sparkles className="h-5 w-5" />
-          <h2 className="text-sm font-semibold tracking-tight text-slate-200">
+      <div className="flex items-center justify-between p-4 border-b border-[#27272A] bg-[#131313]">
+        <div className="flex items-center gap-2 text-[#10B981]">
+          <Sparkles className="h-5 w-5 animate-pulse" />
+          <h2 className="text-sm font-semibold tracking-tighter text-white font-technical uppercase">
             AI Chat
           </h2>
         </div>
@@ -160,45 +169,45 @@ export default function ChatSidebar() {
           variant="ghost"
           size="icon"
           onClick={() => setIsChatOpen(false)}
-          className="text-slate-400 hover:text-white hover:bg-white/5 h-8 w-8"
+          className="text-zinc-400 hover:text-white hover:bg-white/5 h-8 w-8 rounded-none"
         >
           <X className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
         {chatMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-slate-500 space-y-2">
-          <Sparkles className="h-10 w-10 opacity-30" />
-          <p className="text-sm">Start a conversation with AI</p>
-        </div>
+          <div className="flex flex-col items-center justify-center h-full text-zinc-500 space-y-2 font-technical">
+            <Sparkles className="h-10 w-10 text-[#10B981] opacity-35" />
+            <p className="text-xs uppercase tracking-wider">Start flow state session</p>
+          </div>
         ) : (
           chatMessages.map((msg) => (
             <div key={msg.id} className="space-y-2">
               {msg.type === "user" && (
                 <div className="flex justify-end">
-                  <div className="bg-purple-600/20 text-purple-100 px-4 py-2 rounded-lg max-w-[85%] rounded-br-sm">
+                  <div className="bg-[#131313] border border-[#27272A] text-white px-4 py-3 rounded-none max-w-[90%]">
                     <p className="text-sm leading-relaxed">{msg.content}</p>
                     {msg.context && msg.context.items && msg.context.items.length > 0 && (
                       <div className="mt-2">
                         <button
                           onClick={() => setExpandedContextId(expandedContextId === msg.id ? null : msg.id)}
-                          className="text-xs text-purple-300 hover:text-purple-200 flex items-center gap-1"
+                          className="text-[10px] font-technical text-[#10B981] hover:text-[#10B981]/80 flex items-center gap-1 uppercase tracking-wider"
                         >
                           📎 Context ({msg.context.items.length} files) {expandedContextId === msg.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                         </button>
                         {expandedContextId === msg.id && (
-                          <div className="mt-1 text-xs bg-purple-900/30 border border-purple-700/30 rounded p-2 space-y-1">
+                          <div className="mt-1.5 text-[11px] font-technical bg-[#0E0E0E] border border-[#27272A] rounded-none p-2 space-y-1.5">
                             {msg.context.items.map((item: any, idx: number) => (
-                              <div key={idx} className="flex items-center gap-1">
-                                <span className="text-purple-400">
+                              <div key={idx} className="flex items-center gap-1.5">
+                                <span className="text-[#10B981]">
                                   {item.type === "NOTE" ? "📄" : item.type === "STACK" ? "📊" : item.type === "TASK" || item.type === "TASKS" ? "✅" : "📅"}
                                 </span>
-                                <span className="font-medium text-purple-300">{item.title || item.id}</span>
+                                <span className="font-semibold text-white truncate max-w-[150px]">{item.title || item.id}</span>
                                 {item.source && (
-                                  <span className="text-purple-400/60 text-[10px] ml-1">
-                                    - {item.source === "user_mention" ? "mentioned" : item.source}
+                                  <span className="text-zinc-500 text-[9px] uppercase">
+                                    ({item.source === "user_mention" ? "mention" : item.source})
                                   </span>
                                 )}
                               </div>
@@ -212,14 +221,20 @@ export default function ChatSidebar() {
               )}
               {msg.type === "ai" && (
                 <div className="flex justify-start">
-                  <div className="bg-zinc-800/50 text-zinc-200 px-4 py-2 rounded-lg max-w-[85%] rounded-bl-sm">
+                  <div className="bg-[#131313] border border-[#27272A] text-white px-4 py-3 rounded-none max-w-[90%] shadow-lg">
+                    <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-[#27272A]">
+                      <div className="w-5 h-5 bg-[#10B981] text-[#0E0E0E] flex items-center justify-center font-technical font-bold text-xs">AI</div>
+                      <span className="text-[10px] font-technical text-zinc-400">SYSTEM RESPOND</span>
+                    </div>
                     {msg.status === "processing" ? (
-                      <div className="flex items-center gap-2 text-slate-400">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-sm">Thinking...</span>
+                      <div className="flex items-center gap-2 text-[#10B981] font-technical text-xs py-1">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span className="uppercase tracking-wider">Analyzing Context...</span>
                       </div>
                     ) : (
-                      <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed text-slate-200">
+                      <div className="prose prose-invert prose-xs max-w-none text-zinc-100 font-sans leading-relaxed
+                        [&_pre]:bg-[#0E0E0E] [&_pre]:border [&_pre]:border-[#27272A] [&_pre]:rounded-none [&_pre]:p-3 [&_pre]:my-2
+                        [&_code]:font-technical [&_code]:text-xs [&_code]:text-[#10B981]">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
                       </div>
                     )}
@@ -233,10 +248,11 @@ export default function ChatSidebar() {
       </div>
 
       {/* Input Area */}
-      <div className="p-4 border-t border-white/10 bg-[#0a0f16]">
+      <div className="p-4 border-t border-[#27272A] bg-[#131313] flex flex-col gap-2">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <Button
             type="button"
+            variant="technical"
             size="icon"
             disabled={isProcessing}
             onMouseDown={async () => {
@@ -262,8 +278,8 @@ export default function ChatSidebar() {
               }
             }}
             onTouchEnd={stopSTT}
-            className={`h-10 w-10 rounded transition-all ${
-              isRecording ? "bg-red-500 hover:bg-red-600" : "bg-purple-600 hover:bg-purple-700"
+            className={`h-10 w-10 rounded-full transition-all flex-shrink-0 flex items-center justify-center border border-[#27272A] ${
+              isRecording ? "bg-red-500 hover:bg-red-600 text-white" : "bg-[#0E0E0E] hover:bg-[#131313] text-white"
             }`}
           >
             <Mic className={`h-4 w-4 ${isRecording ? "animate-pulse" : ""}`} />
@@ -271,19 +287,23 @@ export default function ChatSidebar() {
           <Input
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type a message..."
+            placeholder="Type a command..."
             disabled={isProcessing || isRecording}
-            className="h-10 bg-zinc-800/50 border-zinc-700 text-sm focus-visible:ring-0"
+            className="h-10 bg-[#0E0E0E] border-[#27272A] text-sm focus-visible:border-[#10B981] rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
           />
           <Button
             type="submit"
             size="icon"
+            variant="technical"
             disabled={!inputText.trim() || isProcessing || isRecording}
-            className="h-10 w-10 rounded bg-purple-600 hover:bg-purple-700"
+            className="h-10 w-10 rounded-none bg-[#10B981] hover:bg-[#10B981]/90 text-[#0E0E0E] disabled:bg-zinc-800 disabled:text-zinc-500 disabled:opacity-50 flex-shrink-0"
           >
             <Send className="h-4 w-4" />
           </Button>
         </form>
+        <div className="text-[10px] text-center text-zinc-500 font-technical uppercase tracking-wider">
+          Push to talk: Press <kbd className="bg-[#0E0E0E] px-1 py-0.5 border border-[#27272A] text-zinc-400">Ctrl</kbd> + <kbd className="bg-[#0E0E0E] px-1 py-0.5 border border-[#27272A] text-zinc-400">Space</kbd>
+        </div>
       </div>
     </div>
   );

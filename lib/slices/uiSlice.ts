@@ -132,8 +132,7 @@ export const createUiSlice: StateCreator<RootStore, [], [], UiSlice> = (set) => 
   currentUserId: null,
   setCurrentUserId: (id) => set({ currentUserId: id }),
 
-  // Multi-tab selection for context
-  selectedTabIds: [],
+
   toggleTabSelection: (tabId) => {
     set((state) => {
       const isSelected = state.selectedTabIds.includes(tabId);

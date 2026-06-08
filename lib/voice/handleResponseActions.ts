@@ -66,15 +66,21 @@ function handleDataAction(
     case "update_note": {
       const noteId: string = updatedData?.id || ctx.currentNoteId || "";
       if (!noteId) return "AI suggested edits but no note is open to display them.";
-      const noteTitle = updatedData?.title || ctx.noteCache[noteId]?.title || "Note";
+
+      const diff = updatedData?.diff;
+      if (!diff || !diff.content_to_insert) {
+        return "AI suggested edits but no inline suggestion was returned.";
+      }
+
+      const noteTitle = ctx.noteCache[noteId]?.title || "Note";
       store.openTab(noteId, "NOTE", noteTitle);
       store.stageMutation({
         type: "update_note",
         noteId,
         originalContent: ctx.noteCache[noteId]?.content || ctx.originalContent || "",
-        updatedData,
+        diff,
       });
-      return `AI suggested edits to "${noteTitle}".\n\nReview the highlighted diff and click **Accept** to save or **Discard** to revert.`;
+      return `AI suggests: "${diff.content_to_insert}"\n\nPress **Tab** to accept or **Esc** to dismiss.`;
     }
 
     case "add_stack_row": {

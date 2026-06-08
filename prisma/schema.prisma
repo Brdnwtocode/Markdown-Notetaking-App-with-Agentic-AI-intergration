@@ -14,9 +14,11 @@ model User {
   emailVerified DateTime?
   name          String?
   image         String?
+  password      String?   // Hashed password for email/password auth (null for OAuth users)
 
-  accounts Account[]
-  sessions Session[]
+  accounts      Account[]
+  sessions      Session[]
+  refreshTokens RefreshToken[]
 
   notes  Note[]
   stacks Stack[]
@@ -168,4 +170,62 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  token     String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FastAPI-managed tables (NOT managed by Prisma — read-only from NextJS)
+//
+// These tables are owned by the Python FastAPI microservice.
+// They are declared here so Prisma db push does NOT attempt to drop them.
+// Do NOT use Prisma to write to these tables — FastAPI owns the schema.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model Interaction {
+  id           BigInt    @id @default(autoincrement())
+  sessionId    String    @map("session_id") @db.VarChar(64)
+  userId       String    @default("default") @map("user_id") @db.VarChar(64)
+  timestamp    DateTime  @default(now()) @map("timestamp") @db.Timestamptz()
+  transcript   String    @map("transcript") @db.Text
+  contextType  String    @map("context_type") @db.VarChar(20)
+  action       String    @map("action") @db.VarChar(50)
+  params       Json      @default("{}") @map("params") @db.JsonB
+  reply        String?   @map("reply") @db.Text
+  language     String    @default("vi") @map("language") @db.VarChar(10)
+  complexity   String    @default("simple") @map("complexity") @db.VarChar(20)
+  durationMs   Float?    @map("duration_ms") @db.DoublePrecision
+  success      Boolean   @default(true) @map("success")
+
+  @@map("interactions")
+  @@index([sessionId])
+  @@index([userId, timestamp(sort: Desc)])
+  @@index([contextType])
+  @@index([action])
+}
+
+model UserProfile {
+  userId                  String   @id @default("default") @map("user_id") @db.VarChar(64)
+  preferredLanguage       String   @default("vi") @map("preferred_language") @db.VarChar(10)
+  frequentlyUsedActions   Json     @default("{}") @map("frequently_used_actions") @db.JsonB
+  frequentlyUsedContexts  Json     @default("{}") @map("frequently_used_contexts") @db.JsonB
+  commonWorkflows         Json     @default("[]") @map("common_workflows") @db.JsonB
+  tonePreference          String   @default("command") @map("tone_preference") @db.VarChar(20)
+  totalInteractions       Int      @default(0) @map("total_interactions")
+  knownFacts              Json     @default("{}") @map("known_facts") @db.JsonB
+  createdAt               DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt               DateTime @default(now()) @map("updated_at") @db.Timestamptz()
+
+  @@map("user_profiles")
 }

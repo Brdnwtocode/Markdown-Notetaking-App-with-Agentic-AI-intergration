@@ -39,7 +39,7 @@ export interface AiSlice {
   clearChatMessages: () => void;
 };
 
-export const createAiSlice: StateCreator<RootStore, [], [], AiSlice> = (set, get) => ({
+export const createAiSlice: StateCreator<RootStore, [], [], AiSlice> = (set) => ({
   // AI Conversational UI (legacy)
   aiReply: null,
   setAiReply: (reply) => set({ aiReply: reply }),

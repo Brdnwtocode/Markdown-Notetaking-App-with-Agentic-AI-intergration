@@ -1,5 +1,5 @@
-import axios from "axios";
-import type { VoiceProcessRequest, VoiceResponse } from "@/types/voice";
+import { apiClient } from "@/lib/httpClient";
+import type { VoiceResponse } from "@/types/voice";
 
 export const processVoiceCommand = async (
   audioBlob: Blob,
@@ -24,7 +24,7 @@ export const processVoiceCommand = async (
   // Note: dynamic_schema is no longer sent separately —
   // stack schema is already inside packed_context.items[].content.schema.columns
 
-  const res = await axios.post<VoiceResponse>("/api/voice/process", formData, {
+  const res = await apiClient.post<VoiceResponse>("/api/voice/process", formData, {
     headers: {
       "Content-Type": "multipart/form-data",
     },

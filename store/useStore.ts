@@ -7,7 +7,6 @@ export {
   type OpenTab,
   type TabType,
   type SyncState,
-  type PendingAction,
   type Task,
   type TaskStatus,
   type TaskPriority,

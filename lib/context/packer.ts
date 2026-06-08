@@ -4,11 +4,10 @@
 // Intent detection is left entirely to the AI model on the FastAPI side.
 
 import { RootStore } from "@/lib/store";
-import { 
+import type { 
   ContextItem, 
   PackedContext, 
   ContextPackerOptions, 
-  DataFormat,
 } from "./types";
 import { formatData } from "./dataFormatter";
 
@@ -37,8 +36,6 @@ export class ContextPacker {
       tabIds?: string[];
       mentions?: string[];
       includeRecent?: boolean;
-      /** Accept transcript for API compatibility but no longer used for intent detection */
-      transcript?: string;
     },
     packerOptions?: ContextPackerOptions
   ): Promise<PackedContext> {
@@ -126,37 +123,43 @@ export class ContextPacker {
     // Collect all available materials
     const allNotes = Object.values(noteCache);
     const allStacks = stacks;
-    const allTasks = [...tasks, ...Object.values(taskChildrenMap).flat()];
+    // Deduplicate tasks by ID (tasks array may overlap with taskChildrenMap values)
+    const taskMap = new Map<string, typeof tasks[number]>();
+    for (const t of tasks) taskMap.set(t.id, t);
+    for (const children of Object.values(taskChildrenMap)) {
+      for (const t of children) taskMap.set(t.id, t);
+    }
+    const allTasks = [...taskMap.values()];
 
     for (const mention of mentions) {
       // Clean mention (remove @ if present)
       const searchTerm = mention.replace(/^@/, "").toLowerCase();
 
-      // Try to match by title (case-insensitive)
-      let matched = false;
+      // Try to match by title (case-insensitive) — first match wins
+      let found = false;
 
       // Search in notes
       const note = allNotes.find((n) => n.title.toLowerCase().includes(searchTerm));
-      if (note && !matched) {
+      if (note && !found) {
         const item = await this.buildContextItem("NOTE", note.id, note.title, "user_mention", opts);
         if (item) items.push(item);
-        matched = true;
+        found = true;
       }
 
       // Search in stacks
       const stack = allStacks.find((s) => s.name.toLowerCase().includes(searchTerm));
-      if (stack && !matched) {
+      if (stack && !found) {
         const item = await this.buildContextItem("STACK", stack.id, stack.name, "user_mention", opts);
         if (item) items.push(item);
-        matched = true;
+        found = true;
       }
 
       // Search in tasks
       const task = allTasks.find((t) => t.title.toLowerCase().includes(searchTerm));
-      if (task && !matched) {
+      if (task && !found) {
         const item = await this.buildContextItem("TASK", task.id, task.title, "user_mention", opts);
         if (item) items.push(item);
-        matched = true;
+        found = true;
       }
     }
 
@@ -166,26 +169,26 @@ export class ContextPacker {
   /**
    * Pack from recent activity (placeholder)
    */
-  private async packFromRecentActivity(opts: ContextPackerOptions): Promise<ContextItem[]> {
-    // TODO: Implement recent activity tracking
+  private async packFromRecentActivity(_opts: ContextPackerOptions): Promise<ContextItem[]> {
+    // TODO: Implement recent activity tracking (e.g. recently edited notes, last-viewed stacks)
     return [];
   }
 
   /**
    * Build a ContextItem for a given type and ID.
-   * ALWAYS includes full data — the AI decides what's relevant.
+   * Respects opts.includeContent / opts.includeMetadata flags.
    */
   private async buildContextItem(
     type: string,
     id: string,
     title: string,
-    source: "active_tab" | "user_mention" | "recent_activity",
+    source: ContextItem["source"],
     opts: ContextPackerOptions
   ): Promise<ContextItem | null> {
     const { noteCache, stacks, tasks, taskChildrenMap, calendarEvents, cursorPosition } = this.store;
 
     const base: ContextItem = {
-      type: type as any,
+      type: type as ContextItem["type"],
       id,
       title,
       source,
@@ -197,12 +200,15 @@ export class ContextPacker {
           const note = noteCache[id];
           if (!note) return null;
 
-          // NOTES: Always send content (they're small)
-          base.content = note.content || "";
-          base.metadata = {
-            cursorPosition,
-            title: note.title,
-          };
+          if (opts.includeContent) {
+            base.content = note.content || "";
+          }
+          if (opts.includeMetadata) {
+            base.metadata = {
+              cursorPosition,
+              title: note.title,
+            };
+          }
           break;
         }
 
@@ -211,57 +217,75 @@ export class ContextPacker {
           if (!stack) return null;
 
           // Strip redundant stackId and sort by order (user-arranged column order)
-          const cleanColumns = stack.columns
-            .map(({ stackId, ...col }: any) => col)
-            .sort((a: any, b: any) => (a.order ?? 0) - (b.order ?? 0));
+          const cleanColumns = (stack.columns as any[])
+            .map((col: any) => {
+              const { stackId, ...rest } = col;
+              return rest;
+            })
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
           const rows = (stack.rows || []).slice(0, opts.maxRowsForFullData);
-          const formattedData = formatData(
-            "stack",
-            rows,
-            opts.dataFormat || "csv",
-            cleanColumns
-          );
 
-          base.content = {
-            schema: { columns: cleanColumns },
-            stats: {
+          if (opts.includeContent) {
+            const formattedData = formatData(
+              "stack",
+              rows,
+              opts.dataFormat || "csv",
+              cleanColumns
+            );
+
+            base.content = {
+              schema: { columns: cleanColumns },
+              stats: {
+                rowCount: stack.rows?.length || 0,
+                columnCount: cleanColumns.length,
+              },
+              dataFormat: opts.dataFormat || "csv",
+              data: formattedData,
+            };
+          }
+
+          if (opts.includeMetadata) {
+            base.metadata = {
+              dataFormat: opts.dataFormat || "csv",
               rowCount: stack.rows?.length || 0,
-              columnCount: cleanColumns.length,
-            },
-            dataFormat: opts.dataFormat || "csv",
-            data: formattedData,
-          };
-
-          base.metadata = {
-            dataFormat: opts.dataFormat || "csv",
-            rowCount: stack.rows?.length || 0,
-          };
+            };
+          }
           break;
         }
 
         case "TASK": {
-          const allTasks = [...tasks, ...Object.values(taskChildrenMap).flat()];
-          const task = allTasks.find((t) => t.id === id);
+          // Deduplicate tasks by ID (tasks array may overlap with taskChildrenMap)
+          const taskMap = new Map<string, typeof tasks[number]>();
+          for (const t of tasks) taskMap.set(t.id, t);
+          for (const children of Object.values(taskChildrenMap)) {
+            for (const t of children) taskMap.set(t.id, t);
+          }
+          const task = taskMap.get(id);
           if (!task) return null;
 
-          // TASKS: Send content (usually small)
-          base.content = JSON.stringify({
-            title: task.title,
-            description: task.description,
-            status: task.status,
-            priority: task.priority,
-            parentId: task.parentId || null,
-            children: task.children?.map((t: any) => ({
-              id: t.id,
-              title: t.title,
-              status: t.status,
-            })) || [],
-          });
+          if (opts.includeContent) {
+            const childTasks = taskChildrenMap[id] || [];
+            base.content = {
+              title: task.title,
+              description: task.description,
+              status: task.status,
+              priority: task.priority,
+              parentId: task.parentId || null,
+              children: childTasks.map((t) => ({
+                id: t.id,
+                title: t.title,
+                status: t.status,
+              })),
+            };
+          }
 
-          base.metadata = {
-            isSubtask: !!task.parentId,
-            subtaskCount: task.children?.length || 0,
-          };
+          if (opts.includeMetadata) {
+            const childTasks = taskChildrenMap[id] || [];
+            base.metadata = {
+              isSubtask: !!task.parentId,
+              subtaskCount: childTasks.length,
+            };
+          }
           break;
         }
 
@@ -269,11 +293,19 @@ export class ContextPacker {
           // Special case: TASKS tab (no specific task)
           base.type = "TASK";
           base.id = "tasks-overview";
-          const allTasks = [...tasks, ...Object.values(taskChildrenMap).flat()];
-          base.metadata = {
-            taskCount: allTasks.length,
-            completedCount: allTasks.filter((t) => t.status === "DONE").length,
-          };
+          if (opts.includeMetadata) {
+            // Deduplicate tasks by ID for accurate counts
+            const taskMap = new Map<string, typeof tasks[number]>();
+            for (const t of tasks) taskMap.set(t.id, t);
+            for (const children of Object.values(taskChildrenMap)) {
+              for (const t of children) taskMap.set(t.id, t);
+            }
+            const allTasks = [...taskMap.values()];
+            base.metadata = {
+              taskCount: allTasks.length,
+              completedCount: allTasks.filter((t) => t.status === "DONE").length,
+            };
+          }
           break;
         }
 
@@ -281,22 +313,25 @@ export class ContextPacker {
           base.type = "CALENDAR";
           base.id = "calendar-overview";
           
-          // CALENDAR: Always send events as CSV
-          const formattedData = formatData(
-            "event",
-            calendarEvents,
-            opts.dataFormat || "csv"
-          );
+          if (opts.includeContent) {
+            const formattedData = formatData(
+              "event",
+              calendarEvents,
+              opts.dataFormat || "csv"
+            );
 
-          base.content = {
-            dataFormat: opts.dataFormat || "csv",
-            data: formattedData,
-            eventCount: calendarEvents.length,
-          };
-          
-          base.metadata = {
-            eventCount: calendarEvents.length,
-          };
+            base.content = {
+              dataFormat: opts.dataFormat || "csv",
+              data: formattedData,
+              eventCount: calendarEvents.length,
+            };
+          }
+
+          if (opts.includeMetadata) {
+            base.metadata = {
+              eventCount: calendarEvents.length,
+            };
+          }
           break;
         }
 
@@ -306,7 +341,10 @@ export class ContextPacker {
 
       return base;
     } catch (error) {
-      console.error(`Error building context item for ${type}:${id}`, error);
+      console.error(
+        `[ContextPacker] Failed to build context item — type=${type} id=${id} title="${title}" source=${source}`,
+        error instanceof Error ? error.message : error
+      );
       return null;
     }
   }

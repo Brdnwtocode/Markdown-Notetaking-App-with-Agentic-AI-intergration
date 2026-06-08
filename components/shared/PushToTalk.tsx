@@ -17,7 +17,7 @@ import { useDeepgramSTT, STTStatus } from "@/lib/hooks/useDeepgramSTT";
 import { packContext } from "@/lib/voice/contextHelpers";
 import { buildVoiceFormData, getFormDataContext } from "@/lib/voice/buildFormData";
 import { handleResponseActions } from "@/lib/voice/handleResponseActions";
-import axios from "axios";
+import { apiClient } from "@/lib/httpClient";
 import toast from "react-hot-toast";
 
 export default function PushToTalk() {
@@ -70,7 +70,7 @@ export default function PushToTalk() {
         // 4. Build & send FormData
         const form = buildVoiceFormData(transcript, packedContext, getFormDataContext());
 
-        const res = await axios.post("/api/voice/process", form, {
+        const res = await apiClient.post("/api/voice/process", form, {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
@@ -95,8 +95,8 @@ export default function PushToTalk() {
         toast.dismiss("voice-processing");
 
         let msg = "Failed to process voice command. Please try again.";
-        if (axios.isAxiosError(err)) {
-          const apiError = err.response?.data?.error;
+        if (err && typeof err === "object" && "isAxiosError" in err) {
+          const apiError = (err as any).response?.data?.error;
           if (apiError === "Command not recognized as a workspace action.") {
             msg = "Command not recognized as a workspace action. Please clarify your request and try again.";
           } else if (typeof apiError === "string" && apiError.trim() !== "") {

@@ -51,34 +51,58 @@ export default function TaskDialog({ open, onOpenChange, task, onSubmit }: TaskD
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-zinc-900 border-zinc-800 text-slate-200">
-        <DialogHeader><DialogTitle>{task ? "Edit Task" : "New Task"}</DialogTitle></DialogHeader>
-        <form onSubmit={handleSubmit(submitHandler)} className="space-y-4">
-          <Input placeholder="Title" {...register("title")} className="bg-zinc-800 border-zinc-700" />
-          <Textarea placeholder="Description" {...register("description")} className="bg-zinc-800 border-zinc-700" />
-          <div className="flex gap-2">
-            {(["TODO", "IN_PROGRESS", "DONE"] as const).map((s) => (
-              <Button type="button" key={s} variant="outline" className="flex-1" onClick={() => setValue("status", s as TaskStatus)}>
-                {s.replace("_", " ")}
+    <div className="space-y-4">
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="bg-[#131313] border border-[#27272A] text-white rounded-none">
+          <DialogHeader>
+            <DialogTitle className="text-white font-technical uppercase text-sm tracking-wider">
+              {task ? "Edit Task" : "New Task"}
+            </DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(submitHandler)} className="space-y-4">
+            <Input placeholder="Title" {...register("title")} />
+            <Textarea placeholder="Description" {...register("description")} />
+            
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-technical uppercase text-zinc-400">Status</label>
+              <div className="flex gap-2">
+                {(["TODO", "IN_PROGRESS", "DONE"] as const).map((s) => (
+                  <Button type="button" key={s} variant="secondary" className="flex-1 text-xs font-technical uppercase rounded-none" onClick={() => setValue("status", s as TaskStatus)}>
+                    {s.replace("_", " ")}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-technical uppercase text-zinc-400">Priority</label>
+              <div className="flex gap-2">
+                {(["LOW", "MEDIUM", "HIGH"] as const).map((p) => (
+                  <Button type="button" key={p} variant="secondary" className="flex-1 text-xs font-technical uppercase rounded-none" onClick={() => setValue("priority", p as TaskPriority)}>
+                    {p}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <Input placeholder="Assignee (text)" {...register("assignee")} />
+            
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-technical uppercase text-zinc-400">Due Date</label>
+              <input type="date" {...register("dueDate")} className="bg-[#0E0E0E] border border-[#27272A] rounded-none px-3 py-2 text-sm text-white w-full font-technical" />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="secondary" onClick={() => onOpenChange(false)} className="rounded-none">
+                Cancel
               </Button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            {(["LOW", "MEDIUM", "HIGH"] as const).map((p) => (
-              <Button type="button" key={p} variant="outline" className="flex-1" onClick={() => setValue("priority", p as TaskPriority)}>
-                {p}
+              <Button type="submit" variant="technical" className="rounded-none">
+                {task ? "Save" : "Create"}
               </Button>
-            ))}
-          </div>
-          <Input placeholder="Assignee (text)" {...register("assignee")} className="bg-zinc-800 border-zinc-700" />
-          <input type="date" {...register("dueDate")} className="bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-slate-300 w-full" />
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit">{task ? "Save" : "Create"}</Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

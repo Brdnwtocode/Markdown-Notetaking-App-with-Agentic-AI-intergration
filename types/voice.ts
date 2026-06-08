@@ -35,6 +35,25 @@ export interface VoiceProcessRequest {
   user_id?: string;
 }
 
+// ─── Diff structure for update_note ─────────────────────────────────────────
+
+/**
+ * The AI returns ONLY the text to insert + where to insert it.
+ * It does NOT return the full note content.
+ * NextJS renders this as ghost text at the cursor position (like VS Code inline completions).
+ * User presses Tab to accept, Esc to dismiss.
+ */
+export interface NoteDiff {
+  /** Type of edit: append (to end), insert (at cursor), replace (selection) */
+  action_type: "append" | "insert" | "replace";
+  /** The text the AI wants to insert at cursor_position */
+  content_to_insert: string;
+  /** Character offset in the raw markdown string where the text should be inserted */
+  cursor_position: number;
+  /** Optional: surrounding text for context preview */
+  preview_surrounding?: string;
+}
+
 // ─── Inbound Response from FastAPI ──────────────────────────────────────────
 
 export interface VoiceResponse {
@@ -49,6 +68,7 @@ export interface VoiceResponse {
    * Updated data for the action (mutually exclusive with aiReply).
    * Present when the voice command results in a data mutation.
    * 
+   * For update_note: { id, diff: NoteDiff } — ghost text at cursor, NOT full content
    * For bulk_update_stack: Array of row updates with dynamic column mappings
    * For manage_tasks: Task action (create/update/delete) with parameters
    * For summarize_context: Summary output (typically in aiReply instead)

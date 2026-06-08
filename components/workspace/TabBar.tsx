@@ -62,7 +62,7 @@ export default function TabBar() {
   const isAllSelected = openTabs.length > 0 && selectedTabIds.length === openTabs.length;
 
   return (
-      <div className="flex items-center h-10 bg-[#252525] border-b border-zinc-700/30 px-2">
+      <div className="flex items-center h-10 bg-[#131313] border-b border-[#27272A] px-2 select-none">
         {/* Selection controls */}
         {openTabs.length > 1 && (
           <div className="flex items-center gap-1 mr-2">
@@ -72,7 +72,7 @@ export default function TabBar() {
                 e.stopPropagation();
                 isAllSelected ? clearTabSelection() : selectAllTabs();
               }}
-              className="p-1 rounded hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
+              className="p-1 rounded-none hover:bg-white/10 text-zinc-400 hover:text-white transition-colors"
               title={isAllSelected ? "Clear selection" : "Select all tabs"}
             >
               {isAllSelected ? <Minus className="h-3 w-3" /> : <Check className="h-3 w-3" />}
@@ -80,7 +80,7 @@ export default function TabBar() {
           </div>
         )}
         
-        <div className="flex items-center gap-1 overflow-x-auto flex-1">
+        <div className="flex items-center h-full overflow-x-auto flex-1 scrollbar-none">
           {openTabs.map((tab) => {
             const isSelected = selectedTabIds.includes(tab.id);
             const isActive = activeTabId === tab.id;
@@ -89,11 +89,11 @@ export default function TabBar() {
               <div
                   key={tab.id}
                   title={tab.type === "TASKS" ? "Tasks" : tab.type === "CALENDAR" ? "Calendar" : tab.title}
-                  className={`group flex items-center gap-2 px-3 py-1.5 rounded text-sm whitespace-nowrap transition-colors cursor-pointer ${
+                  className={`group flex items-center gap-2 px-3 h-full text-xs font-medium whitespace-nowrap transition-colors cursor-pointer border-r border-[#27272A] ${
                       isActive
-                          ? "bg-white/10 text-slate-200"
-                          : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
-                  } ${isSelected ? "ring-1 ring-purple-500/50" : ""}`}
+                          ? "bg-[#0E0E0E] text-white border-t-2 border-t-[#10B981] border-b border-b-transparent"
+                          : "bg-transparent text-zinc-400 border-t-2 border-t-transparent hover:text-white hover:bg-white/5"
+                  } ${isSelected ? "border-b-2 border-b-[#10B981]/50" : ""}`}
                   onClick={(e) => handleTabClick(tab.id, e)}
               >
                 {/* Selection checkbox */}
@@ -103,37 +103,37 @@ export default function TabBar() {
                       e.stopPropagation();
                       toggleTabSelection(tab.id);
                     }}
-                    className={`shrink-0 w-4 h-4 rounded border transition-colors ${
+                    className={`shrink-0 w-3.5 h-3.5 rounded-none border transition-colors flex items-center justify-center ${
                       isSelected 
-                        ? "bg-purple-600 border-purple-500" 
-                        : "border-slate-500 hover:border-slate-300"
+                        ? "bg-[#10B981] border-[#10B981]" 
+                        : "border-[#27272A] hover:border-zinc-500"
                     }`}
                     title={isSelected ? "Deselect tab" : "Select tab for context"}
                 >
-                  {isSelected && <Check className="h-3 w-3 text-white" />}
+                  {isSelected && <Check className="h-2.5 w-2.5 text-[#0E0E0E] stroke-[3px]" />}
                 </button>
 
                 {tab.type === "TASKS" ? (
                   <>
-                    <CheckSquare className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-                    <span className="sr-only">Tasks</span>
+                    <CheckSquare className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden />
+                    <span className="font-technical uppercase text-[10px]">Tasks</span>
                   </>
                 ) : tab.type === "CALENDAR" ? (
                   <>
-                    <CalendarDays className="h-4 w-4 shrink-0 text-slate-400" aria-hidden />
-                    <span className="sr-only">Calendar</span>
+                    <CalendarDays className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden />
+                    <span className="font-technical uppercase text-[10px]">Calendar</span>
                   </>
                 ) : (
-                  <span>{tab.title}</span>
+                  <span className="truncate max-w-[120px]">{tab.title}</span>
                 )}
                 <button
                     type="button"
-                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity shrink-0"
+                    className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity shrink-0 ml-1"
                     title={`Close ${tab.type === "TASKS" ? "Tasks" : tab.type === "CALENDAR" ? "Calendar" : tab.title}`}
                     aria-label={`Close ${tab.type === "TASKS" ? "Tasks" : tab.type === "CALENDAR" ? "Calendar" : tab.title}`}
                     onClick={(e) => handleCloseTab(e, tab.id)}
                 >
-                  <X size={14} />
+                  <X size={12} />
                 </button>
               </div>
             );
@@ -141,16 +141,16 @@ export default function TabBar() {
         </div>
         <div className="ml-auto flex items-center gap-2 pr-2">
           {selectedTabIds.length > 0 && (
-            <span className="text-xs text-purple-400">
-              {selectedTabIds.length} selected
+            <span className="text-[10px] font-technical font-semibold text-[#10B981]">
+              [{selectedTabIds.length} SELECTED]
             </span>
           )}
           {isSaving || syncState === "SAVING" ? (
-              <Loader className="h-4 w-4 animate-spin text-slate-400" />
+              <Loader className="h-3.5 w-3.5 animate-spin text-[#10B981]" />
           ) : syncState === "ERROR" ? (
-              <Cloud className="h-4 w-4 text-red-400" />
+              <Cloud className="h-3.5 w-3.5 text-red-500" />
           ) : (
-              <Cloud className="h-4 w-4 text-green-400" />
+              <Cloud className="h-3.5 w-3.5 text-[#10B981]" />
           )}
         </div>
       </div>

@@ -56,21 +56,23 @@ export async function POST(request: NextRequest) {
     // Handle packed_context (new) or legacy single context (backward compatible)
     if (packedContextStr) {
       fastApiFormData.append("packed_context", packedContextStr);
+      // NOTE: note_state is intentionally NOT forwarded when packed_context is present —
+      // the full note content is already inside packed_context.items[0].content.
+      // Sending both would double-pack the note and waste tokens.
     } else {
-      // Legacy single context
+      // Legacy single context (no packed_context)
       fastApiFormData.append("context_type", contextType);
       fastApiFormData.append("context_id", contextId);
+      // Legacy: only send note_state when packed_context is absent
+      if (noteState) {
+        fastApiFormData.append("note_state", noteState);
+      }
     }
     
     if (cursorPosition) {
       fastApiFormData.append("cursor_position", cursorPosition);
     }
     
-    // Typed request fields for FastAPI contract
-    // note_state: current note content (sent when a note is open)
-    if (noteState) {
-      fastApiFormData.append("note_state", noteState);
-    }
     // Note: dynamic_schema is NOT forwarded separately — it's already inside
     // packed_context.items[].content.schema.columns when context_type is STACK
     // task_context: focused task context (sent when contextType is TASK)
@@ -88,12 +90,26 @@ export async function POST(request: NextRequest) {
     console.log(`[FastAPI Request] User: ${session.user.id}, Has Audio: ${!!audioFile}, Has Transcript: ${!!transcript}`);
     console.log(`[FastAPI Request] Context: ${packedContextStr ? 'packed_context' : `${contextType}/${contextId}`}`);
 
-    // Forward to FastAPI microservice
+    // Extract x-session-id from incoming request for memory continuity
+    const sessionId = request.headers.get("x-session-id") || "";
+    const userId = session.user.id;
+    console.log(`[FastAPI Request] Session ID: ${sessionId || "(none)"}, User ID: ${userId}`);
+
+    // Forward to FastAPI microservice, passing both session and user as HTTP headers.
+    // These headers enable the memory infrastructure (ConversationBuffer, UserProfile,
+    // InteractionStore) to scope data per-user and maintain per-tab conversation continuity.
+    const fastApiHeaders: Record<string, string> = {};
+    if (sessionId) {
+      fastApiHeaders["x-session-id"] = sessionId;
+    }
+    fastApiHeaders["x-user-id"] = userId;
+
     const fastApiResponse = await fetch(
       `${fastApiUrl}/api/v1/voice/process`,
       {
         method: "POST",
         body: fastApiFormData,
+        headers: fastApiHeaders,
       }
     );
 

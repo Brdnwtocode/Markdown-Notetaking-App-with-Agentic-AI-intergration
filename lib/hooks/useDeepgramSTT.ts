@@ -15,6 +15,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import toast from "react-hot-toast";
+import { getSessionId } from "@/lib/session";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,12 @@ export function useDeepgramSTT({
         method: "POST",
         body: form,
         credentials: "include",
+        headers: (() => {
+          const h: Record<string, string> = {};
+          const sid = getSessionId();
+          if (sid && sid !== "ssr-placeholder") h["x-session-id"] = sid;
+          return h;
+        })(),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();

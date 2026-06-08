@@ -43,9 +43,9 @@ export function buildVoiceFormData(
   }
 
   // Typed aux payloads
-  if (primary.type === "NOTE" && ctx.currentNoteId && !isNoContextItem(primary.id)) {
-    form.append("note_state", ctx.noteCache[ctx.currentNoteId]?.content ?? "");
-  } else if (primary.type === "TASK" && ctx.currentFocusedTaskId && !isNoContextItem(primary.id)) {
+  // NOTE: note_state is intentionally NOT sent — the full note content is already
+  // inside packed_context.items[0].content. Sending it again would double-pack the note.
+  if (primary.type === "TASK" && ctx.currentFocusedTaskId && !isNoContextItem(primary.id)) {
     const allTasks = [...ctx.tasks, ...Object.values(ctx.taskChildrenMap).flat()];
     const focused = allTasks.find((t) => t.id === ctx.currentFocusedTaskId);
     if (focused) {

@@ -10,7 +10,6 @@ import { useWorkspaceStore } from "@/lib/store";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
@@ -178,33 +177,33 @@ export default function Sidebar() {
   return (
       <div className="flex h-screen">
         {/* Level 1: Ribbon - Actionable Buttons */}
-        <div className="w-12 bg-[#1e1e1e] border-r border-zinc-700/30 flex flex-col items-center py-4 space-y-2">
+        <div className="w-12 bg-[#0E0E0E] border-r border-[#27272A] flex flex-col items-center py-4 space-y-2">
           <Button
               size="icon"
               variant="ghost"
               onClick={() => setIsExplorerOpen(!isExplorerOpen)}
-              className="h-10 w-10 rounded hover:bg-white/5"
+              className="h-10 w-10 rounded-none hover:bg-white/5"
               title={isExplorerOpen ? "Close Explorer" : "Open Explorer"}
           >
-            {isExplorerOpen ? <PanelLeftClose className="h-5 w-5 text-slate-400" /> : <PanelLeftOpen className="h-5 w-5 text-slate-400" />}
+            {isExplorerOpen ? <PanelLeftClose className="h-5 w-5 text-[#A1A1AA]" /> : <PanelLeftOpen className="h-5 w-5 text-[#A1A1AA]" />}
           </Button>
           <Button
               size="icon"
               variant="ghost"
               onClick={createNote}
-              className="h-10 w-10 rounded hover:bg-white/5"
+              className="h-10 w-10 rounded-none hover:bg-white/5"
               title="New Note"
           >
-            <Plus className="h-5 w-5 text-slate-400" />
+            <Plus className="h-5 w-5 text-[#A1A1AA]" />
           </Button>
           <Button
               size="icon"
               variant="ghost"
               onClick={() => setShowStackDialog(true)}
-              className="h-10 w-10 rounded hover:bg-white/5"
+              className="h-10 w-10 rounded-none hover:bg-white/5"
               title="New Stack"
           >
-            <Database className="h-5 w-5 text-slate-400" />
+            <Database className="h-5 w-5 text-[#A1A1AA]" />
           </Button>
           <Button
               size="icon"
@@ -213,10 +212,10 @@ export default function Sidebar() {
                 openTab(TASKS_TAB_ID, "TASKS", "Tasks");
                 router.push("/workspace/tasks");
               }}
-              className="h-10 w-10 rounded hover:bg-white/5"
+              className="h-10 w-10 rounded-none hover:bg-white/5"
               title="Tasks"
           >
-            <CheckSquare className="h-5 w-5 text-slate-400" />
+            <CheckSquare className="h-5 w-5 text-[#A1A1AA]" />
           </Button>
           <Button
               size="icon"
@@ -225,61 +224,61 @@ export default function Sidebar() {
                 openTab(CALENDAR_TAB_ID, "CALENDAR", "Calendar");
                 router.push("/workspace/calendar");
               }}
-              className="h-10 w-10 rounded hover:bg-white/5"
+              className="h-10 w-10 rounded-none hover:bg-white/5"
               title="Calendar"
           >
-            <CalendarDays className="h-5 w-5 text-slate-400" />
+            <CalendarDays className="h-5 w-5 text-[#A1A1AA]" />
           </Button>
           <Button
               size="icon"
               variant="ghost"
               onClick={() => setIsChatOpen(!isChatOpen)}
-              className={`h-10 w-10 rounded hover:bg-white/5 ${isChatOpen ? 'bg-purple-600/20 text-purple-400' : ''}`}
+              className={`h-10 w-10 rounded-none transition-all ${isChatOpen ? 'bg-[#10B981] hover:bg-[#10B981]/90' : 'hover:bg-white/5'}`}
               title="AI Chat"
           >
-            <MessageSquare className={`h-5 w-5 ${isChatOpen ? 'text-purple-400' : 'text-slate-400'}`} />
+            <MessageSquare className={`h-5 w-5 ${isChatOpen ? 'text-[#0E0E0E]' : 'text-[#A1A1AA]'}`} />
           </Button>
           <div className="flex-1" />
           <Button
               size="icon"
               variant="ghost"
               onClick={() => signOut({ redirectTo: "/" })}
-              className="h-10 w-10 rounded hover:bg-white/5"
+              className="h-10 w-10 rounded-none hover:bg-white/5"
               title="Sign Out"
           >
-            <LogOut className="h-5 w-5 text-slate-400" />
+            <LogOut className="h-5 w-5 text-[#A1A1AA]" />
           </Button>
         </div>
         {/* Level 2: Unified Explorer */}
       {isExplorerOpen && (
-        <div className="w-72 bg-[#262626] border-r border-zinc-700/30 flex flex-col">
-          <div className="p-3 border-b border-zinc-700/30 space-y-2">
+        <div className="w-72 bg-[#131313] border-r border-[#27272A] flex flex-col">
+          <div className="p-3 border-b border-[#27272A] space-y-2">
             <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold tracking-tight text-slate-400 uppercase">Files</h2>
+              <h2 className="text-xs font-semibold tracking-tighter text-white uppercase font-technical">Files</h2>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 hover:bg-white/5">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 rounded-none hover:bg-white/5 text-[#A1A1AA] hover:text-white">
                     {getSortIcon()}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setSortMethod("a-z")}>
+                <DropdownMenuContent align="end" className="bg-[#131313] border-[#27272A] rounded-none">
+                  <DropdownMenuItem onClick={() => setSortMethod("a-z")} className="hover:bg-white/5 text-white rounded-none">
                     <ArrowUpAZ className="h-4 w-4 mr-2" />
                     A - Z
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortMethod("z-a")}>
+                  <DropdownMenuItem onClick={() => setSortMethod("z-a")} className="hover:bg-white/5 text-white rounded-none">
                     <ArrowDownAZ className="h-4 w-4 mr-2" />
                     Z - A
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortMethod("date-new")}>
+                  <DropdownMenuItem onClick={() => setSortMethod("date-new")} className="hover:bg-white/5 text-white rounded-none">
                     <Calendar className="h-4 w-4 mr-2" />
                     Newest First
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortMethod("date-old")}>
+                  <DropdownMenuItem onClick={() => setSortMethod("date-old")} className="hover:bg-white/5 text-white rounded-none">
                     <Calendar className="h-4 w-4 mr-2" />
                     Oldest First
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortMethod("type")}>
+                  <DropdownMenuItem onClick={() => setSortMethod("type")} className="hover:bg-white/5 text-white rounded-none">
                     <Filter className="h-4 w-4 mr-2" />
                     By Type
                   </DropdownMenuItem>
@@ -287,26 +286,26 @@ export default function Sidebar() {
               </DropdownMenu>
             </div>
             <div className="relative">
-              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
               <Input
                 type="text"
                 placeholder="Search files..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 h-8 bg-zinc-800/50 border-zinc-700 text-sm focus-visible:ring-0"
+                className="pl-9 h-8 bg-[#0E0E0E] border-[#27272A] text-sm text-white placeholder:text-zinc-500 focus-visible:border-[#10B981] rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
               />
             </div>
           </div>
 
-          <div className="flex-1 overflow-auto p-2 space-y-0.5">
+          <div className="flex-1 overflow-auto p-2 space-y-0.5 scrollbar-thin scrollbar-thumb-zinc-800">
             {filteredAndSortedItems.map((item) => (
               <Link
                 key={item.id}
                 href={item.href}
-                className={`flex items-center gap-2 px-3 py-1.5 text-sm transition-colors duration-75 truncate ${
+                className={`flex items-center gap-2 px-3 py-1.5 text-sm transition-colors duration-75 truncate border-l-2 rounded-none ${
                   item.isActive
-                    ? "bg-white/5 text-slate-200"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                    ? "bg-white/5 text-white border-l-[#10B981] pl-2.5"
+                    : "text-[#A1A1AA] border-l-transparent hover:text-white hover:bg-white/5"
                 }`}
               >
                 {item.type === "NOTE" ? (
@@ -318,7 +317,7 @@ export default function Sidebar() {
               </Link>
             ))}
             {filteredAndSortedItems.length === 0 && (
-              <div className="px-3 py-4 text-sm text-slate-500 text-center">
+              <div className="px-3 py-4 text-sm text-slate-500 text-center font-technical">
                 {searchQuery ? "No files found" : "No files yet"}
               </div>
             )}
@@ -328,27 +327,15 @@ export default function Sidebar() {
 
       {/* Stack Creation Dialog */}
       <Dialog open={showStackDialog} onOpenChange={setShowStackDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Create New Stack</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm font-medium">Stack Name</label>
-              <input
-                type="text"
-                value={stackName}
-                onChange={(e) => setStackName(e.target.value)}
-                placeholder="e.g., Product Inventory"
-                className="w-full mt-1 px-3 py-2 border border-white/10 rounded text-sm bg-slate-950 text-white"
-              />
-            </div>
-            <SchemaBuilder
-              onConfirm={handleCreateStack}
-              onCancel={() => setShowStackDialog(false)}
-              isLoading={creatingStack}
-            />
-          </div>
+        <DialogContent className="max-w-4xl bg-[#0E0E0E] border-[#27272A] p-0 text-white overflow-hidden rounded-none">
+          <DialogTitle className="sr-only">Create New Stack</DialogTitle>
+          <SchemaBuilder
+            onConfirm={handleCreateStack}
+            onCancel={() => setShowStackDialog(false)}
+            isLoading={creatingStack}
+            stackName={stackName}
+            setStackName={setStackName}
+          />
         </DialogContent>
       </Dialog>
     </div>

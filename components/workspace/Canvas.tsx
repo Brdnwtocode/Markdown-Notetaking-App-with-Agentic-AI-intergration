@@ -84,53 +84,53 @@ export default function Canvas() {
   };
 
   return (
-    <div className="h-full flex flex-col p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <h2 className="text-lg font-semibold">Canvas</h2>
+    <div className="h-full flex flex-col p-4 bg-[#0E0E0E] text-white">
+      <div className="flex items-center gap-3 mb-4 border-b border-[#27272A] pb-3">
+        <h2 className="text-sm font-semibold font-technical uppercase tracking-wider text-[#10B981]">Canvas</h2>
         <input
           type="color"
           value={selectedColor}
           onChange={(e) => setSelectedColor(e.target.value)}
-          className="w-8 h-8 rounded"
+          className="w-6 h-6 border border-[#27272A] bg-transparent cursor-pointer"
         />
         <Button
           onClick={() => addShape("rectangle")}
           size="sm"
-          variant="outline"
+          variant="secondary"
         >
-          <Plus className="h-3 w-3 mr-1" /> Rectangle
+          <Plus className="h-3.5 w-3.5 mr-1 text-[#10B981]" /> Rectangle
         </Button>
         <Button
           onClick={() => addShape("circle")}
           size="sm"
-          variant="outline"
+          variant="secondary"
         >
-          <Plus className="h-3 w-3 mr-1" /> Circle
+          <Plus className="h-3.5 w-3.5 mr-1 text-[#10B981]" /> Circle
         </Button>
         <Button
           onClick={() => addShape("line")}
           size="sm"
-          variant="outline"
+          variant="secondary"
         >
-          <Plus className="h-3 w-3 mr-1" /> Line
+          <Plus className="h-3.5 w-3.5 mr-1 text-[#10B981]" /> Line
         </Button>
       </div>
 
-      <div className="flex-1 border border-border rounded bg-white">
-        <svg className="w-full h-full" style={{ backgroundColor: "#fafafa" }}>
+      <div className="flex-1 border border-[#27272A] rounded-none bg-[#131313]">
+        <svg className="w-full h-full" style={{ backgroundColor: "#131313" }}>
           {shapes.map((shape) => renderShape(shape))}
         </svg>
       </div>
 
       {/* Shape Properties */}
       {shapes.length > 0 && (
-        <div className="mt-4 p-3 border border-border rounded bg-muted/30">
-          <p className="text-sm font-semibold mb-2">Shapes ({shapes.length})</p>
-          <div className="space-y-1 max-h-32 overflow-y-auto">
+        <div className="mt-4 p-3 border border-[#27272A] rounded-none bg-[#131313]">
+          <p className="text-xs font-semibold mb-2 font-technical uppercase tracking-wider text-zinc-400">Shapes ({shapes.length})</p>
+          <div className="space-y-1 max-h-32 overflow-y-auto scrollbar-thin">
             {shapes.map((shape) => (
               <div
                 key={shape.id}
-                className="flex items-center justify-between text-xs p-2 bg-background rounded"
+                className="flex items-center justify-between text-xs p-2 bg-[#0E0E0E] border border-[#27272A] rounded-none font-technical text-zinc-300"
               >
                 <span>
                   {shape.type} @ ({shape.x}, {shape.y})
@@ -139,9 +139,9 @@ export default function Canvas() {
                   onClick={() => deleteShape(shape.id)}
                   size="icon"
                   variant="ghost"
-                  className="h-5 w-5"
+                  className="h-5 w-5 hover:bg-[#EF4444]/10 hover:text-[#EF4444]"
                 >
-                  <Trash2 className="h-3 w-3" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
             ))}

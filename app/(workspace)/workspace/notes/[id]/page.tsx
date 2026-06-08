@@ -57,6 +57,22 @@ export default function NotePage() {
   const { setCurrentNoteId, noteCache, upsertNoteCache, optimisticPatchNote, optimisticDeleteNote, openTab, isRawMarkdownView, toggleRawMarkdownView } =
     useWorkspaceStore();
 
+  // ── Keep local note state in sync with Zustand noteCache ─────────
+  // When confirmMutation (or any other flow) updates noteCache,
+  // the local `note` state must reflect the latest content so
+  // LiveEditor receives the correct `content` prop after accept.
+  const cachedNote = noteCache[noteId];
+  useEffect(() => {
+    if (cachedNote) {
+      setNote((prev: any) => {
+        // Only update if content or title actually changed (avoid re-render loops)
+        if (prev?.content === cachedNote.content && prev?.title === cachedNote.title) return prev;
+        return cachedNote;
+      });
+      setTitle((prev) => (prev !== cachedNote.title ? cachedNote.title : prev));
+    }
+  }, [cachedNote]);
+
   useEffect(() => {
     setCurrentNoteId(noteId);
     fetchNote();

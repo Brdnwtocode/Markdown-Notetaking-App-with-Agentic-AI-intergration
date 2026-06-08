@@ -96,7 +96,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
   const resizeStartWidthRef = useRef(0);
   const dragColumnRef = useRef<string | null>(null);
   
-  const { notes, pendingMutation, confirmMutation, discardMutation, setFocusedRow, setFocusedColumn, updateStack } = useWorkspaceStore();
+  const { notes, pendingMutation, setFocusedRow, setFocusedColumn, updateStack } = useWorkspaceStore();
   const router = useRouter();
 
   // Sync local rows/columns to the Zustand store so ContextPacker
@@ -481,47 +481,47 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#1e1e1e]">
+    <div className="flex flex-col h-full bg-[#0E0E0E]">
       {/* Toolbar */}
-      <div className="flex items-center justify-between px-6 py-3 border-b border-zinc-700/30 bg-[#262626]">
+      <div className="flex items-center justify-between px-6 py-3 border-b border-[#27272A] bg-[#131313]">
         <div className="flex items-center gap-4">
           <Button
             onClick={addRow}
-            variant="ghost"
+            variant="secondary"
             size="sm"
-            className="text-slate-300 hover:text-slate-100 hover:bg-white/5"
+            className="text-white hover:border-[#10B981]"
           >
-            <Plus className="h-4 w-4 mr-1" />
+            <Plus className="h-4 w-4 mr-1 text-[#10B981]" />
             New row
           </Button>
           <Button
             onClick={() => setShowGridLines(!showGridLines)}
-            variant="ghost"
+            variant="secondary"
             size="sm"
-            className="text-slate-300 hover:text-slate-100 hover:bg-white/5"
+            className="text-white hover:border-[#10B981]"
           >
-            <Grid3X3 className="h-4 w-4 mr-1" />
+            <Grid3X3 className="h-4 w-4 mr-1 text-[#10B981]" />
             {showGridLines ? "Hide Grid" : "Show Grid"}
           </Button>
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
               <Button
-                variant="ghost"
+                variant="secondary"
                 size="sm"
-                className="text-slate-300 hover:text-slate-100 hover:bg-white/5"
+                className="text-white hover:border-[#10B981]"
               >
-                <Layers className="h-4 w-4 mr-1" />
+                <Layers className="h-4 w-4 mr-1 text-[#10B981]" />
                 {groupConfig ? "Ungroup" : "Group"}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent 
               align="start" 
-              className="bg-zinc-900/100 backdrop-blur-md border border-zinc-700/100 max-h-[60vh] overflow-y-auto"
+              className="bg-[#131313] border border-[#27272A] rounded-none max-h-[60vh] overflow-y-auto"
               avoidCollisions={true}
               collisionPadding={8}
               sideOffset={4}
             >
-              <DropdownMenuLabel>Group by</DropdownMenuLabel>
+              <DropdownMenuLabel className="font-technical text-[10px] text-[#A1A1AA] uppercase">Group by</DropdownMenuLabel>
               {columns.map((col) => (
                 <DropdownMenuItem
                   key={col.id}
@@ -530,6 +530,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                       groupConfig?.columnId === col.id ? null : { columnId: col.id }
                     )
                   }
+                  className="hover:bg-white/5 text-white rounded-none text-xs"
                 >
                   {col.name}
                 </DropdownMenuItem>
@@ -538,11 +539,11 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
           </DropdownMenu>
           <Button
             onClick={copyTable}
-            variant="ghost"
+            variant="secondary"
             size="sm"
-            className="text-slate-300 hover:text-slate-100 hover:bg-white/5"
+            className="text-white hover:border-[#10B981]"
           >
-            <Copy className="h-4 w-4 mr-1" />
+            <Copy className="h-4 w-4 mr-1 text-[#10B981]" />
             Copy Table
           </Button>
         </div>
@@ -552,13 +553,13 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
               onClick={handleSave}
               size="sm"
               disabled={isSaving}
-              className="bg-zinc-700/60 hover:bg-zinc-600/60 text-slate-300 border border-zinc-600/40"
+              variant="technical"
             >
               <Save className="h-3.5 w-3.5 mr-1.5" />
               {isSaving ? "Saving..." : "Save"}
             </Button>
           )}
-          <p className="text-[10px] text-slate-600">
+          <p className="text-[10px] text-zinc-500 font-technical uppercase">
             * {new Date(lastUpdated).toLocaleTimeString([], { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
           </p>
         </div>
@@ -571,7 +572,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
       >
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10">
-            <tr className="border-b border-zinc-700/30 bg-[#262626]">
+            <tr className="border-b border-[#27272A] bg-[#131313]">
               {columns.map((col) => (
                 <th
                   key={col.id}
@@ -580,8 +581,8 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, col.id)}
                   onDragEnd={handleDragEnd}
-                  className={`text-left text-sm font-medium text-slate-300 select-none relative ${
-                    showGridLines ? "border-r border-zinc-700/30" : ""
+                  className={`text-left text-sm font-semibold text-white select-none relative ${
+                    showGridLines ? "border-r border-[#27272A]" : ""
                   }`}
                   style={{ width: columnWidths[col.id] || 180 }}
                 >
@@ -807,14 +808,14 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
             </tr>
             {/* Filter inputs row */}
             {filters.length > 0 && (
-              <tr className="border-b border-zinc-700/30 bg-[#262626]">
+              <tr className="border-b border-[#27272A] bg-[#131313]">
                 {columns.map((col) => {
                   const colFilters = filters.filter(f => f.columnId === col.id);
                   return (
                     <th
                       key={`filter-${col.id}`}
                       className={`text-left text-sm font-medium text-slate-300 ${
-                        showGridLines ? "border-r border-zinc-700/30" : ""
+                        showGridLines ? "border-r border-[#27272A]" : ""
                       }`}
                       style={{ width: columnWidths[col.id] || 180 }}
                     >
@@ -836,7 +837,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                               ));
                             }}
                             placeholder={`${filter.type}...`}
-                            className="h-6 bg-transparent border border-zinc-700 px-2 text-xs text-slate-200 focus-visible:ring-0"
+                            className="h-6 bg-transparent border border-[#27272A] px-2 text-xs text-white placeholder:text-zinc-500 focus-visible:border-[#10B981] rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
                           />
                         ))}
                       </div>
@@ -851,10 +852,10 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
             {Object.entries(processedData).map(([groupKey, groupRows]) => (
               <React.Fragment key={groupKey}>
                 {groupConfig && groupKey && (
-                  <tr className="bg-zinc-800/30">
+                  <tr className="bg-[#131313]">
                     <td
                       colSpan={columns.length + 1}
-                      className="px-3 py-2 text-sm font-semibold text-slate-300"
+                      className="px-3 py-2 text-sm font-semibold text-slate-300 font-technical uppercase"
                     >
                       {groupKey} ({groupRows.length})
                     </td>
@@ -863,8 +864,8 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                 {groupRows.map((row) => (
                   <tr
                     key={row.id}
-                    className={`${showGridLines ? "border-b border-zinc-800/30" : ""} hover:bg-white/[0.02] group ${
-                      row.id === useWorkspaceStore.getState().focusedRowId ? "bg-white/[0.05]" : ""
+                    className={`${showGridLines ? "border-b border-[#27272A]" : ""} hover:bg-[#1A1A1A] group transition-colors duration-100 ${
+                      row.id === useWorkspaceStore.getState().focusedRowId ? "bg-white/5" : ""
                     }`}
                     onClick={() => {
                       setFocusedRow(row.id);
@@ -874,8 +875,8 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                       <td
                         key={`${row.id}-${col.id}`}
                         className={`px-3 py-1.5 ${
-                          showGridLines ? "border-r border-zinc-700/30" : ""
-                        } ${row.id === useWorkspaceStore.getState().focusedRowId && col.id === useWorkspaceStore.getState().focusedColumnId ? "ring-2 ring-blue-500/50" : ""}`}
+                          showGridLines ? "border-r border-[#27272A]" : ""
+                        } ${row.id === useWorkspaceStore.getState().focusedRowId && col.id === useWorkspaceStore.getState().focusedColumnId ? "ring-1 ring-[#10B981]" : ""}`}
                         style={{ width: columnWidths[col.id] || 180 }}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -888,7 +889,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                             type="checkbox"
                             checked={!!row.data[col.id]}
                             onChange={(e) => updateCell(row.id, col.id, e.target.checked)}
-                            className="rounded h-4 w-4"
+                            className="rounded-none h-4 w-4 accent-[#10B981] border-[#27272A] bg-transparent"
                           />
                         ) : col.type === "INT" || col.type === "FLOAT" ? (
                           <input
@@ -907,7 +908,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                                 );
                               }
                             }}
-                            className="w-full bg-transparent border-none text-sm text-slate-200 focus-visible:ring-0 px-1 py-0.5"
+                            className="w-full bg-transparent border-none text-sm text-white focus-visible:ring-0 px-1 py-0.5 font-technical"
                             placeholder="0"
                           />
                         ) : col.type === "DATE" ? (
@@ -915,11 +916,11 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                             type="date"
                             value={row.data[col.id] ?? ""}
                             onChange={(e) => updateCell(row.id, col.id, e.target.value)}
-                            className="w-full bg-transparent border-none text-sm text-slate-200 focus-visible:ring-0 px-1 py-0.5"
+                            className="w-full bg-transparent border-none text-sm text-white focus-visible:ring-0 px-1 py-0.5 font-technical"
                           />
                         ) : col.type === "FORMULA" ? (
                           <div className="flex items-center gap-1 px-1 py-0.5">
-                            <div className="text-sm text-slate-200 font-medium">
+                            <div className="text-sm text-white font-medium font-technical">
                               {(() => {
                                 const result = getFormulaResult(col.id);
                                 return result !== null ? result : "-";
@@ -929,15 +930,15 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                               variant="ghost"
                               size="icon"
                               onClick={() => openFormulaDialog(col.id)}
-                              className="h-5 w-5 opacity-0 group-hover:opacity-100"
+                              className="h-5 w-5 opacity-0 group-hover:opacity-100 rounded-none hover:bg-white/5"
                             >
-                              <MoreHorizontal className="h-3 w-3" />
+                              <MoreHorizontal className="h-3 w-3 text-zinc-400" />
                             </Button>
                           </div>
                         ) : col.type === "RELATION" ? (
                           <button
                             onClick={() => handleRelationClick(row.data[col.id] as string)}
-                            className="text-sky-400 hover:text-sky-300 text-sm px-1 py-0.5 underline decoration-sky-500/50 hover:decoration-sky-400"
+                            className="text-[#10B981] hover:text-[#10B981]/80 text-sm px-1 py-0.5 underline decoration-[#10B981]/30 hover:decoration-[#10B981] transition-colors"
                           >
                             {row.data[col.id] || "Click to link..."}
                           </button>
@@ -946,7 +947,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                             type="text"
                             value={row.data[col.id] ?? ""}
                             onChange={(e) => updateCell(row.id, col.id, e.target.value)}
-                            className="w-full bg-transparent border-none text-sm text-slate-200 focus-visible:ring-0 px-1 py-0.5"
+                            className="w-full bg-transparent border-none text-sm text-white focus-visible:ring-0 px-1 py-0.5"
                             placeholder="Text"
                           />
                         )}
@@ -958,7 +959,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                         variant="ghost"
                         size="icon"
                         onClick={() => copyRow(row)}
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-white/5 hover:text-slate-300"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-white/5 hover:text-white rounded-none border border-transparent hover:border-[#27272A] transition-all"
                       >
                         <Copy className="h-3.5 w-3.5" />
                       </Button>
@@ -966,7 +967,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                         variant="ghost"
                         size="icon"
                         onClick={() => deleteRow(row.id)}
-                        className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400"
+                        className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-[#EF4444]/10 hover:text-[#EF4444] rounded-none border border-transparent hover:border-[#EF4444]/30 transition-all"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -975,43 +976,24 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                 ))}
               </React.Fragment>
             ))}
-            
-            {/* AI Confirmation Gate Row */}
+                       {/* AI Confirmation Gate Row */}
             {pendingMutation?.type === "add_stack_row" && pendingMutation.stackId === stackId && (
-              <tr className="bg-yellow-900/30 border-y border-yellow-700/50 group relative">
+              <tr className="bg-[#10B9810D] border-y border-[#27272A] group relative">
                 {columns.map((col, index) => (
                   <td
                     key={`pending-${col.id}`}
                     className={`px-3 py-1.5 relative ${
-                      showGridLines ? "border-r border-yellow-700/30" : ""
-                    }`}
+                      showGridLines ? "border-r border-[#27272A]" : ""
+                    } ${index === 0 ? "border-l-4 border-l-[#10B981]" : ""}`}
                     style={{ width: columnWidths[col.id] || 180 }}
                   >
-                    {index === 0 && (
-                      <div className="absolute -top-10 left-4 bg-zinc-900 border border-yellow-700/50 shadow-lg rounded-md px-3 py-1.5 flex items-center gap-3 z-20 whitespace-nowrap">
-                        <span className="text-xs font-medium text-yellow-500 flex items-center gap-1.5">
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-yellow-500"></span>
-                          </span>
-                          AI Suggested
-                        </span>
-                        <div className="w-px h-4 bg-zinc-700"></div>
-                        <button onClick={() => confirmMutation()} className="text-xs text-slate-300 hover:text-white flex items-center gap-1 font-medium">
-                          Accept
-                        </button>
-                        <button onClick={discardMutation} className="text-xs text-slate-300 hover:text-white flex items-center gap-1 font-medium">
-                          Discard
-                        </button>
-                      </div>
-                    )}
-                    <div className="w-full text-sm text-yellow-100/90 px-1 py-0.5 cursor-not-allowed">
+                    <div className="w-full text-sm text-[#10B981]/90 px-1 py-0.5 cursor-not-allowed font-mono">
                       {col.type === "BOOLEAN" ? (
                         <input
                           type="checkbox"
                           checked={!!pendingMutation.data[col.id]}
                           readOnly
-                          className="rounded h-4 w-4 opacity-70"
+                          className="rounded-none h-4 w-4 opacity-70 accent-[#10B981]"
                         />
                       ) : (
                         String(pendingMutation.data[col.id] ?? "")
@@ -1025,59 +1007,50 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
             
             {/* AI Confirmation Gate for Bulk Update */}
             {pendingMutation?.type === "bulk_update_stack" && pendingMutation.stackId === stackId && (
-              <tr className="bg-blue-900/30 border-y border-blue-700/50 group relative">
-                <td colSpan={columns.length + 1} className="px-3 py-3">
-                  <div className="bg-zinc-900 border border-blue-700/50 shadow-lg rounded-md px-4 py-2.5 flex items-center gap-4">
-                    <span className="text-xs font-medium text-blue-500 flex items-center gap-1.5">
-                      <span className="relative flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                      </span>
-                      AI Suggested Bulk Update ({pendingMutation.updates.length} row(s))
+              <tr className="bg-[#10B9810D] border-y border-[#27272A] group relative">
+                <td colSpan={columns.length + 1} className="px-3 py-3 border-l-4 border-l-[#10B981]">
+                  <div className="flex items-center gap-2 font-mono text-xs text-[#10B981] uppercase tracking-wider">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
                     </span>
-                    <div className="w-px h-4 bg-zinc-700"></div>
-                    <button onClick={() => confirmMutation()} className="text-xs text-slate-300 hover:text-white flex items-center gap-1 font-medium">
-                      Accept
-                    </button>
-                    <button onClick={discardMutation} className="text-xs text-slate-300 hover:text-white flex items-center gap-1 font-medium">
-                      Discard
-                    </button>
+                    AI Suggested Bulk Update ({pendingMutation.updates.length} row(s))
                   </div>
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-
+ 
         {/* Empty State / Add Row */}
         {Object.values(processedData).every((g) => g.length === 0) && (
-          <div className="px-6 py-12 text-center text-slate-500">
-            <p>No rows yet</p>
+          <div className="px-6 py-12 text-center text-zinc-500 font-technical uppercase">
+            <p className="text-sm">No rows yet</p>
             <Button
               onClick={addRow}
-              variant="ghost"
-              className="mt-4 text-slate-300 hover:text-slate-100"
+              variant="secondary"
+              className="mt-4 text-white hover:border-[#10B981]"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4 mr-2 text-[#10B981]" />
               Add a row
             </Button>
           </div>
         )}
       </div>
-
+ 
       {/* Formula Configuration Dialog */}
       <Dialog open={formulaDialogOpen} onOpenChange={setFormulaDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[425px] bg-[#131313] border border-[#27272A] rounded-none">
           <DialogHeader>
-            <DialogTitle>Configure Formula</DialogTitle>
+            <DialogTitle className="text-white font-technical uppercase text-sm">Configure Formula</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Formula Type</label>
+              <label className="text-xs font-semibold text-zinc-400 font-technical uppercase">Formula Type</label>
               <select
                 value={selectedFormulaType}
                 onChange={(e) => setSelectedFormulaType(e.target.value as any)}
-                className="w-full px-3 py-2 border border-zinc-700 rounded bg-transparent text-slate-200"
+                className="w-full px-3 py-2 border border-[#27272A] rounded-none bg-[#0E0E0E] text-white focus:border-[#10B981] focus:outline-none text-sm font-technical"
               >
                 <option value="SUM">Sum</option>
                 <option value="COUNT">Count</option>
@@ -1085,11 +1058,11 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
               </select>
             </div>
             <div className="grid gap-2">
-              <label className="text-sm font-medium">Column</label>
+              <label className="text-xs font-semibold text-zinc-400 font-technical uppercase">Column</label>
               <select
                 value={selectedOperandColumnId || ""}
                 onChange={(e) => setSelectedOperandColumnId(e.target.value || null)}
-                className="w-full px-3 py-2 border border-zinc-700 rounded bg-transparent text-slate-200"
+                className="w-full px-3 py-2 border border-[#27272A] rounded-none bg-[#0E0E0E] text-white focus:border-[#10B981] focus:outline-none text-sm font-technical"
               >
                 {columns.filter(c => c.type === "INT" || c.type === "FLOAT").map(col => (
                   <option key={col.id} value={col.id}>
@@ -1099,11 +1072,11 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
               </select>
             </div>
           </div>
-          <DialogFooter>
-            <Button onClick={() => setFormulaDialogOpen(false)} variant="ghost">
+          <DialogFooter className="flex items-center gap-2">
+            <Button onClick={() => setFormulaDialogOpen(false)} variant="secondary" className="text-white">
               Cancel
             </Button>
-            <Button onClick={saveFormula} className="bg-sky-600 hover:bg-sky-700">
+            <Button onClick={saveFormula} variant="technical">
               Save
             </Button>
           </DialogFooter>

@@ -57,33 +57,34 @@ body {
   }
 
   .dark {
-    /* Obsidian Dark Theme Colors */
-    --background: 0 0% 12%;
-    --foreground: 0 0% 88%;
+    /* Lock In Dark Theme Colors */
+    --background: 0 0% 5.5%; /* #0E0E0E */
+    --foreground: 0 0% 100%; /* #FFFFFF */
 
-    --card: 0 0% 15%;
-    --card-foreground: 0 0% 88%;
+    --card: 0 0% 7.5%; /* #131313 */
+    --card-foreground: 0 0% 100%; /* #FFFFFF */
 
-    --popover: 0 0% 16%;
-    --popover-foreground: 0 0% 88%;
+    --popover: 0 0% 7.5%; /* #131313 */
+    --popover-foreground: 0 0% 100%; /* #FFFFFF */
 
-    --muted: 0 0% 18%;
-    --muted-foreground: 0 0% 65%;
+    --muted: 0 0% 7.5%; /* #131313 */
+    --muted-foreground: 240 5% 65%; /* #A1A1AA */
 
-    --accent: 0 0% 22%;
-    --accent-foreground: 0 0% 92%;
+    --accent: 0 0% 10%; /* #1A1A1A */
+    --accent-foreground: 0 0% 100%; /* #FFFFFF */
 
-    --destructive: 0 74% 53%;
+    --destructive: 0 84.3% 60.2%; /* #EF4444 */
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 25%;
-    --input: 0 0% 25%;
-    --ring: 207 90% 64%;
+    --border: 240 3.7% 15.9%; /* #27272A */
+    --input: 240 3.7% 15.9%; /* #27272A */
+    --ring: 160 84.3% 39.4%; /* #10B981 */
 
-    --primary: 207 90% 64%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 160 84.3% 39.4%; /* #10B981 */
+    --primary-foreground: 0 0% 5.5%; /* #0E0E0E */
 
-    --secondary-foreground: 0 0% 96%;
+    --secondary: 240 3.7% 15.9%; /* #27272A */
+    --secondary-foreground: 0 0% 100%; /* #FFFFFF */
   }
 }
 
@@ -123,14 +124,23 @@ body {
 }
 .rbc-header { border-color: rgba(255,255,255,0.08); color: hsl(var(--muted-foreground)); }
 .rbc-day-bg, .rbc-month-row { border-color: rgba(255,255,255,0.06); }
-.rbc-today { background-color: rgba(86,69,212,0.12); }
+.rbc-today { background-color: rgba(16, 185, 129, 0.12); }
 .rbc-off-range-bg { background-color: rgba(255,255,255,0.02); }
-.rbc-event { border-radius: 4px; padding: 2px 6px; font-size: 12px; border: none; }
-.rbc-event:focus { outline: 2px solid #5645d4; }
+.rbc-event { border-radius: 2px; padding: 2px 6px; font-size: 12px; border: none; background-color: #10B981 !important; color: #0E0E0E !important; }
+.rbc-event:focus { outline: 1px solid #10B981; }
 .rbc-show-more { color: hsl(var(--muted-foreground)); background: transparent; }
 .rbc-agenda-date-cell, .rbc-agenda-time-cell { color: hsl(var(--muted-foreground)); border-color: rgba(255,255,255,0.06); }
 .rbc-agenda-event-cell { border-color: rgba(255,255,255,0.06); }
 .rbc-time-content, .rbc-time-header { border-color: rgba(255,255,255,0.08); }
 .rbc-timeslot-group { border-color: rgba(255,255,255,0.06); }
 .rbc-time-gutter .rbc-label { color: hsl(var(--muted-foreground)); font-size: 11px; }
-.rbc-current-time-indicator { background-color: #5645d4; }
+.rbc-current-time-indicator { background-color: #10B981; }
+
+/* Custom Utilities for Lock In Aesthetic */
+.glow-emerald {
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);
+}
+
+.font-technical {
+  font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+}

@@ -34,7 +34,6 @@ export async function packContext(transcript?: string): Promise<PackedContext> {
   const packed = await packer.pack({
     tabIds,
     mentions: mentions.length > 0 ? mentions : undefined,
-    transcript,
   });
 
   // Ensure at least one item so the API always has context

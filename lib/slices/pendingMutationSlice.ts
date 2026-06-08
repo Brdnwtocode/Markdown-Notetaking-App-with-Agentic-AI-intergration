@@ -1,17 +1,21 @@
 import { StateCreator } from "zustand";
 import { RootStore } from "@/lib/store";
 import toast from "react-hot-toast";
-import axios from "axios";
+import { apiClient } from "@/lib/httpClient";
+import { isAxiosError } from "axios";
+import type { NoteDiff } from "@/types/voice";
+import { adjustCursorPosition, applySuggestionPadding } from "@/lib/utils";
 
 export type PendingMutation = {
   type: "add_stack_row";
   stackId: string;
   data: Record<string, any>;
 } | {
+  /** Ghost-text inline suggestion: AI returns ONLY the text to insert + cursor position. */
   type: "update_note";
   noteId: string;
   originalContent: string;
-  updatedData: { content: string; title?: string; id: string };
+  diff: NoteDiff;
 } | {
   type: "create_task";
   data: {
@@ -80,7 +84,7 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
   mutationStatus: "IDLE",
   stageMutation: (mutation) => set({ pendingMutation: mutation, mutationStatus: "STAGED" }),
   confirmMutation: async () => {
-    const { pendingMutation, optimisticAddStackRow, optimisticPatchNote, optimisticCreateTask, optimisticCreateCalendarEvent, noteCache, stacks, tasks, taskChildrenMap } = get();
+    const { pendingMutation, optimisticAddStackRow, optimisticCreateTask, optimisticCreateCalendarEvent, noteCache, stacks, tasks, taskChildrenMap } = get();
     
     // ---- Snapshot state BEFORE any optimistic mutation for rollback ----
     const originalNoteContent = pendingMutation?.type === "update_note" 
@@ -115,18 +119,55 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         // Optimistic update first
         optimisticAddStackRow(pendingMutation.stackId, pendingMutation.data);
         // Then persist to DB
-        await axios.post(`/api/stacks/${pendingMutation.stackId}/rows`, pendingMutation.data);
+        await apiClient.post(`/api/stacks/${pendingMutation.stackId}/rows`, pendingMutation.data);
       } else if (pendingMutation?.type === "update_note") {
-        // Optimistic update first
-        optimisticPatchNote(pendingMutation.noteId, {
-          content: pendingMutation.updatedData.content,
-          title: pendingMutation.updatedData.title,
+        // Ghost-text confirmation: insert diff.content_to_insert at diff.cursor_position
+        // with smart padding to prevent fusing with adjacent markdown tokens.
+        const { noteId, originalContent, diff } = pendingMutation;
+        const guardPos = adjustCursorPosition(originalContent, diff.cursor_position);
+        const { paddedSuggestion, adjustedPos } = applySuggestionPadding(
+          originalContent,
+          guardPos,
+          diff.content_to_insert
+        );
+        const newContent =
+          originalContent.slice(0, adjustedPos) +
+          paddedSuggestion +
+          originalContent.slice(adjustedPos);
+
+        // Direct cache update (bypass optimisticPatchNote to avoid double API call)
+        const snapshot = get();
+        set((state) => {
+          const cached = state.noteCache[noteId];
+          const nextCached = cached
+            ? { ...cached, content: newContent, updatedAt: new Date().toISOString() }
+            : undefined;
+          return {
+            noteCache: nextCached ? { ...state.noteCache, [noteId]: nextCached } : state.noteCache,
+            notes: state.notes.map((n) =>
+              n.id === noteId ? { ...n, content: newContent, updatedAt: new Date().toISOString() } : n
+            ),
+            syncState: "SAVING",
+            isSaving: true,
+          };
         });
-        // Then persist to DB (using PUT as per API implementation)
-        await axios.put(`/api/notes/${pendingMutation.noteId}`, {
-          content: pendingMutation.updatedData.content,
-          title: pendingMutation.updatedData.title,
-        });
+
+        try {
+          // Persist to DB (single API call)
+          await apiClient.put(`/api/notes/${noteId}`, {
+            content: newContent,
+          });
+          set({ syncState: "SAVED", isSaving: false });
+        } catch (persistError) {
+          // Rollback cache on persist failure
+          set({
+            notes: snapshot.notes,
+            noteCache: snapshot.noteCache,
+            syncState: "ERROR",
+            isSaving: false,
+          });
+          throw persistError; // will be caught by outer try/catch
+        }
       } else if (pendingMutation?.type === "create_task") {
         const d = pendingMutation.data;
         const taskData = {
@@ -141,7 +182,7 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         // Optimistic update first
         optimisticCreateTask(taskData);
         // Then persist to DB
-        await axios.post("/api/tasks", taskData);
+        await apiClient.post("/api/tasks", taskData);
       } else if (pendingMutation?.type === "create_calendar_event") {
         const d = pendingMutation.data;
         const eventData = {
@@ -155,13 +196,13 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         // Optimistic update first
         optimisticCreateCalendarEvent(eventData);
         // Then persist to DB
-        await axios.post("/api/events", eventData);
+        await apiClient.post("/api/events", eventData);
       } else if (pendingMutation?.type === "bulk_update_stack") {
         // Bulk update multiple rows in a stack
         // Note: This requires a new API endpoint or extension to existing rows endpoint
         // For now, we'll update each row individually
         for (const update of pendingMutation.updates) {
-          await axios.patch(`/api/stacks/${pendingMutation.stackId}/rows/${update.rowId}`, {
+          await apiClient.patch(`/api/stacks/${pendingMutation.stackId}/rows/${update.rowId}`, {
             data: update.data,
           });
         }
@@ -180,11 +221,11 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
             parentId: d.parentId ?? null,
           };
           optimisticCreateTask(taskData);
-          await axios.post("/api/tasks", taskData);
+          await apiClient.post("/api/tasks", taskData);
         } else if (pendingMutation.action === "update" && pendingMutation.data?.id) {
-          await axios.patch(`/api/tasks/${pendingMutation.data.id}`, pendingMutation.data);
+          await apiClient.patch(`/api/tasks/${pendingMutation.data.id}`, pendingMutation.data);
         } else if (pendingMutation.action === "delete" && pendingMutation.data?.id) {
-          await axios.delete(`/api/tasks/${pendingMutation.data.id}`);
+          await apiClient.delete(`/api/tasks/${pendingMutation.data.id}`);
         }
       } else if (pendingMutation?.type === "summarize_context") {
         // No mutation needed - summary is in aiReply
@@ -204,10 +245,22 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
       
       // ---- Rollback optimistic updates ----
       if (pendingMutation?.type === "update_note" && originalNoteContent != null) {
-        // Revert note to original content
-        optimisticPatchNote(pendingMutation.noteId, {
-          content: originalNoteContent,
-          title: noteCache[pendingMutation.noteId]?.title ?? "",
+        // Revert note cache to original content (direct state revert, no API call)
+        set((state) => {
+          const cached = state.noteCache[pendingMutation.noteId];
+          const reverted = cached
+            ? { ...cached, content: originalNoteContent, updatedAt: cached.updatedAt }
+            : undefined;
+          return {
+            noteCache: reverted
+              ? { ...state.noteCache, [pendingMutation.noteId]: reverted }
+              : state.noteCache,
+            notes: state.notes.map((n) =>
+              n.id === pendingMutation.noteId
+                ? { ...n, content: originalNoteContent }
+                : n
+            ),
+          };
         });
       } else if (pendingMutation?.type === "add_stack_row" && snapshotStackRows) {
         // Revert stack rows to pre-mutation state by removing the optimistic temp row
@@ -258,7 +311,7 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
       }
       
       // Show error message
-      const message = axios.isAxiosError(error) && error.response?.data?.error
+      const message = isAxiosError(error) && error.response?.data?.error
         ? `Failed to save: ${error.response.data.error}`
         : "Failed to save changes. Please try again.";
       
