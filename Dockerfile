@@ -9,6 +9,10 @@ RUN apk add --no-cache libc6-compat
 COPY package*.json ./
 COPY prisma ./prisma/
 
+# Set build-time dummy variables for Prisma schema validation
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+ENV DIRECT_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+
 # Install dependencies (including devDependencies for build)
 RUN npm ci
 
