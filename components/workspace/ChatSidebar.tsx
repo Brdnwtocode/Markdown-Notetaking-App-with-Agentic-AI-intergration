@@ -241,24 +241,30 @@ export default function ChatSidebar() {
             disabled={isProcessing}
             onMouseDown={async () => {
               if (!isRecording) {
-                const context = getCurrentContext();
-                if (!context) {
-                  toast.error("Select a note, stack, tasks, or calendar first");
-                  return;
+                const packed = await packContext();
+                const primary = packed.items[0];
+                const extras = new FormData();
+                extras.append("contextType", primary.type);
+                extras.append("contextId", primary.id);
+                if (primary.type === "NOTE") {
+                  extras.append("cursorPosition", cursorPosition.toString());
                 }
-                await startSTT(context.type, context.id, new FormData());
+                await startSTT(primary.type, primary.id, extras);
               }
             }}
             onMouseUp={stopSTT}
             onMouseLeave={isRecording ? stopSTT : undefined}
             onTouchStart={async () => {
               if (!isRecording) {
-                const context = getCurrentContext();
-                if (!context) {
-                  toast.error("Select a note, stack, tasks, or calendar first");
-                  return;
+                const packed = await packContext();
+                const primary = packed.items[0];
+                const extras = new FormData();
+                extras.append("contextType", primary.type);
+                extras.append("contextId", primary.id);
+                if (primary.type === "NOTE") {
+                  extras.append("cursorPosition", cursorPosition.toString());
                 }
-                await startSTT(context.type, context.id, new FormData());
+                await startSTT(primary.type, primary.id, extras);
               }
             }}
             onTouchEnd={stopSTT}
