@@ -1,0 +1,77 @@
+name: CI/CD Deploy to AWS EC2 (Next.js)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    name: Deploy Next.js to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Copy files to EC2 via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          port: 22
+          source: ".,!node_modules,!.next,!.git,!.github,!.idea,!.junie"
+          target: "/home/${{ secrets.SSH_USERNAME }}/markdown-app"
+          rm: false
+
+      - name: Run Deploy Script via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
+          AUTH_GITHUB_ID: ${{ secrets.AUTH_GITHUB_ID }}
+          AUTH_GITHUB_SECRET: ${{ secrets.AUTH_GITHUB_SECRET }}
+          AUTH_GOOGLE_ID: ${{ secrets.AUTH_GOOGLE_ID }}
+          AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          FASTAPI_URL: ${{ secrets.FASTAPI_URL }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          port: 22
+          envs: DATABASE_URL,NEXTAUTH_URL,AUTH_SECRET,AUTH_GITHUB_ID,AUTH_GITHUB_SECRET,AUTH_GOOGLE_ID,AUTH_GOOGLE_SECRET,OPENAI_API_KEY,FASTAPI_URL
+          script: |
+            set -e
+            cd /home/${{ secrets.SSH_USERNAME }}/markdown-app
+            
+            # Create or update the .env.local file with the environment variables from GitHub Secrets
+            cat << EOF > .env.local
+            DATABASE_URL="$DATABASE_URL"
+            NEXTAUTH_URL="$NEXTAUTH_URL"
+            AUTH_SECRET="$AUTH_SECRET"
+            AUTH_GITHUB_ID="$AUTH_GITHUB_ID"
+            AUTH_GITHUB_SECRET="$AUTH_GITHUB_SECRET"
+            AUTH_GOOGLE_ID="$AUTH_GOOGLE_ID"
+            AUTH_GOOGLE_SECRET="$AUTH_GOOGLE_SECRET"
+            NEXT_PUBLIC_OPENAI_API_KEY="$OPENAI_API_KEY"
+            OPENAI_API_KEY="$OPENAI_API_KEY"
+            FASTAPI_URL="$FASTAPI_URL"
+            EOF
+            
+            # Check if docker is installed
+            if ! command -v docker &> /dev/null; then
+              echo "ERROR: docker is not installed on the server. Please run the installation commands."
+              exit 1
+            fi
+            
+            # Run docker compose rebuild and restart
+            docker compose down
+            docker compose up --build -d
+            
+            # Display running containers
+            docker compose ps

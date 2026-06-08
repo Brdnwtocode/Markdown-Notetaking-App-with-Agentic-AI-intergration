@@ -1,0 +1,17 @@
+node_modules
+.next
+.git
+.github
+.idea
+.junie
+.env.local
+.env
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+.vercel
+README.md
+DESIGN.md
+INSTALLATION.md
+SETUP.md
+tsconfig.tsbuildinfo
