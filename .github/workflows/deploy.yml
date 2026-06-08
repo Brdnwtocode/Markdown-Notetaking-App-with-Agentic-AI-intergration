@@ -39,16 +39,22 @@ jobs:
           AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FASTAPI_URL: ${{ secrets.FASTAPI_URL }}
+          AUTH_TRUST_HOST: ${{ secrets.AUTH_TRUST_HOST || 'true' }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 22
-          envs: DATABASE_URL,DIRECT_URL,NEXTAUTH_URL,AUTH_SECRET,AUTH_GITHUB_ID,AUTH_GITHUB_SECRET,AUTH_GOOGLE_ID,AUTH_GOOGLE_SECRET,OPENAI_API_KEY,FASTAPI_URL
+          envs: DATABASE_URL,DIRECT_URL,NEXTAUTH_URL,AUTH_SECRET,AUTH_GITHUB_ID,AUTH_GITHUB_SECRET,AUTH_GOOGLE_ID,AUTH_GOOGLE_SECRET,OPENAI_API_KEY,FASTAPI_URL,AUTH_TRUST_HOST
           script: |
             set -e
             cd /home/${{ secrets.SSH_USERNAME }}/markdown-app
+            
+            # If FASTAPI_URL points to localhost or is empty, rewrite it to host.docker.internal for container networking
+            if [ "$FASTAPI_URL" = "http://localhost:8000" ] || [ "$FASTAPI_URL" = "http://127.0.0.1:8000" ] || [ -z "$FASTAPI_URL" ]; then
+              FASTAPI_URL="http://host.docker.internal:8000"
+            fi
             
             # Create or update the .env.local file with the environment variables from GitHub Secrets
             cat << EOF > .env.local
@@ -63,6 +69,7 @@ jobs:
             NEXT_PUBLIC_OPENAI_API_KEY="$OPENAI_API_KEY"
             OPENAI_API_KEY="$OPENAI_API_KEY"
             FASTAPI_URL="$FASTAPI_URL"
+            AUTH_TRUST_HOST="$AUTH_TRUST_HOST"
             EOF
             
             # Check if docker is installed
