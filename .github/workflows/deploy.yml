@@ -28,7 +28,7 @@ jobs:
           port: 22
           source: ".,!node_modules,!.next,!.git,!.github,!.idea,!.junie"
           target: "/home/${{ secrets.SSH_USERNAME }}/markdown-app"
-          rm: false
+          rm: true
 
       - name: Run Deploy Script via SSH
         uses: appleboy/ssh-action@v1.0.3
