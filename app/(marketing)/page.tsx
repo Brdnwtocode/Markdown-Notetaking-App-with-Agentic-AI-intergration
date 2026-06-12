@@ -16,6 +16,14 @@ export default function LandingPage() {
   const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
 
   useEffect(() => {
+    const handlePageShow = () => {
+      document.body.style.pointerEvents = "";
+      document.body.style.overflow = "";
+      document.documentElement.style.pointerEvents = "";
+      document.documentElement.style.overflow = "";
+    };
+    window.addEventListener("pageshow", handlePageShow);
+
     let timer: NodeJS.Timeout;
     const targetWord = words[currentWordIndex];
     const typingSpeed = isDeleting ? 75 : 150;
@@ -36,7 +44,10 @@ export default function LandingPage() {
       }, typingSpeed);
     }
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
   }, [currentText, isDeleting, currentWordIndex]);
 
   return (
