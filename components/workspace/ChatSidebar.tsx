@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
@@ -14,6 +13,20 @@ import { apiClient } from "@/lib/httpClient";
 import toast from "react-hot-toast";
 import { useDeepgramSTT } from "@/lib/hooks/useDeepgramSTT";
 
+/** Format a Date for display in chat */
+function formatTime(d: Date): string {
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  if (isToday) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleDateString([], { month: "short", day: "numeric" }) + " " +
+    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Human-readable label for context item type */
+const contextTypeIcon: Record<string, string> = {
+  NOTE: "📄", STACK: "📊", TASK: "✅", TASKS: "✅", CALENDAR: "📅",
+};
+
 export default function ChatSidebar() {
   const {
     isChatOpen,
@@ -23,14 +36,14 @@ export default function ChatSidebar() {
     updateChatMessage,
     currentNoteId,
     currentStackId,
-    cursorPosition,
     currentFocusedTaskId,
+    cursorPosition,
     tasks,
     taskChildrenMap,
     noteCache,
     stacks,
-    setIsVoiceMutating,
-    setAiReply,
+    addVoiceMutatingId,
+    removeVoiceMutatingId,
   } = useWorkspaceStore();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -43,9 +56,13 @@ export default function ChatSidebar() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  // Send message to API
+  // ─── Send text message ────────────────────────────────────────────
+
   const sendMessage = useCallback(
     async (content: string) => {
+      const entityId = currentNoteId || currentStackId || currentFocusedTaskId || "chat";
+      addVoiceMutatingId(entityId);
+
       // 1. Pack context
       const packedContext = await packContext(content);
 
@@ -70,7 +87,6 @@ export default function ChatSidebar() {
       });
 
       setIsProcessing(true);
-      setIsVoiceMutating(true);
 
       try {
         // 4. Build & send FormData
@@ -93,7 +109,6 @@ export default function ChatSidebar() {
         });
 
         updateChatMessage(aiMsgId, { content: replyContent, status: "completed" });
-        if (res.data.aiReply) setAiReply(res.data.aiReply);
       } catch (error) {
         console.error("Chat message failed:", error);
 
@@ -111,12 +126,12 @@ export default function ChatSidebar() {
         toast.error(msg);
       } finally {
         setIsProcessing(false);
-        setIsVoiceMutating(false);
+        removeVoiceMutatingId(entityId);
       }
     },
     [addChatMessage, updateChatMessage, currentNoteId, currentStackId,
      currentFocusedTaskId, cursorPosition, tasks, taskChildrenMap,
-     noteCache, stacks, setIsVoiceMutating, setAiReply]
+     noteCache, stacks, addVoiceMutatingId, removeVoiceMutatingId]
   );
 
   // Handle text input submit
@@ -127,7 +142,8 @@ export default function ChatSidebar() {
     setInputText("");
   };
 
-  // Voice STT integration
+  // ─── Voice STT integration ────────────────────────────────────────
+
   const { status: sttStatus, start: startSTT, stop: stopSTT } = useDeepgramSTT({
     language: "vi",
     model: "nova-3",
@@ -141,64 +157,144 @@ export default function ChatSidebar() {
   });
 
   const isRecording = sttStatus !== "idle";
+  const isSTTProcessing = sttStatus === "minting" || sttStatus === "connecting" || sttStatus === "finalizing";
+
+  const toggleRecording = useCallback(async () => {
+    if (isRecording) {
+      await stopSTT();
+    } else {
+      const packed = await packContext();
+      const primary = packed.items[0];
+      const extras = new FormData();
+      extras.append("contextType", primary.type);
+      extras.append("contextId", primary.id);
+      if (primary.type === "NOTE") {
+        extras.append("cursorPosition", String(cursorPosition));
+      }
+      await startSTT(primary.type, primary.id, extras);
+    }
+  }, [isRecording, stopSTT, startSTT, cursorPosition]);
 
   return (
     <div
-      className={`fixed top-0 right-0 h-full w-80 md:w-96 bg-[#0E0E0E] border-l border-[#27272A] shadow-2xl transition-all duration-300 ease-in-out z-[100] flex flex-col ${
+      className={`fixed top-0 right-0 h-full w-80 md:w-96 glass-panel shadow-[0_0_50px_rgba(0,0,0,0.8)] transition-transform duration-300 ease-in-out z-[100] flex flex-col border-l border-white/5 ${
         isChatOpen ? "translate-x-0" : "translate-x-full"
       }`}
     >
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-[#27272A] bg-[#131313]">
+      <div className="flex items-center justify-between p-4 border-b border-white/5 bg-[#131313]/90 backdrop-blur-md shrink-0">
         <div className="flex items-center gap-2 text-[#10B981]">
-          <Sparkles className="h-5 w-5 animate-pulse" />
-          <h2 className="text-sm font-semibold tracking-tighter text-white font-technical uppercase">
-            AI Chat
+          <div className="h-2 w-2 rounded-full bg-[#10B981] glow-emerald-subtle animate-pulse" />
+          <h2 className="text-xs font-bold tracking-widest text-white font-technical uppercase">
+            AI Companion
           </h2>
         </div>
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setIsChatOpen(false)}
-          className="text-zinc-400 hover:text-white hover:bg-white/5 h-8 w-8 rounded-none"
+          className="text-zinc-500 hover:text-white hover:bg-white/5 h-8 w-8 rounded-lg transition-colors duration-150"
         >
           <X className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent">
+      <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
         {chatMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-zinc-500 space-y-2 font-technical">
-            <Sparkles className="h-10 w-10 text-[#10B981] opacity-35" />
-            <p className="text-xs uppercase tracking-wider">Start flow state session</p>
+          <div className="flex flex-col items-center justify-center h-full text-zinc-400 space-y-6 px-4">
+            <div className="flex flex-col items-center justify-center space-y-2">
+              <div className="relative flex items-center justify-center h-14 w-14 rounded-full bg-[#10B981]/5 border border-[#10B981]/20 glow-emerald-subtle">
+                <Sparkles className="h-6 w-6 text-[#10B981] animate-pulse" />
+              </div>
+              <h3 className="text-xs font-semibold tracking-wider text-white font-technical uppercase">
+                AI Companion Active
+              </h3>
+              <p className="text-[10px] text-zinc-500 uppercase tracking-widest text-center max-w-[220px] leading-relaxed">
+                Ask questions or command the workspace
+              </p>
+            </div>
+            
+            <div className="w-full space-y-2 max-w-[280px]">
+              <p className="text-[9px] text-zinc-600 font-technical uppercase tracking-widest text-center">
+                Quick Actions
+              </p>
+              {[
+                { label: "Summarize active note", text: "Summarize this note" },
+                { label: "Create a task for tomorrow", text: "Create a task for tomorrow to " },
+                { label: "Analyze my stacks", text: "Show me a summary of my stacks" }
+              ].map((action, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    setInputText(action.text);
+                    const inputEl = document.getElementById("chat-input");
+                    if (inputEl) inputEl.focus();
+                  }}
+                  className="w-full text-left px-3.5 py-2.5 bg-[#131313]/50 hover:bg-[#1c1c1c]/80 border border-white/5 hover:border-[#10B981]/35 rounded-xl transition-all duration-200 group flex items-center justify-between text-xs text-zinc-400 hover:text-white"
+                >
+                  <span className="font-technical truncate">{action.label}</span>
+                  <span className="text-[#10B981] translate-x-1 group-hover:translate-x-0 opacity-0 group-hover:opacity-100 transition-all font-technical">→</span>
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           chatMessages.map((msg) => (
-            <div key={msg.id} className="space-y-2">
+            <div key={msg.id} className="space-y-2 animate-in fade-in-50 duration-200">
+              {/* Timestamp & Sender */}
+              <div className={`flex items-center gap-1.5 text-[9px] font-technical uppercase tracking-wider text-zinc-500 ${
+                msg.type === "user" ? "justify-end" : "justify-start"
+              }`}>
+                {msg.type === "user" ? (
+                  <>
+                    <span>User</span>
+                    <span className="h-1 w-1 rounded-full bg-zinc-700"></span>
+                    <span>{formatTime(new Date(msg.timestamp))}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[#10B981] font-semibold">AI Assistant</span>
+                    <span className="h-1 w-1 rounded-full bg-[#10B981]/30"></span>
+                    <span>{formatTime(new Date(msg.timestamp))}</span>
+                  </>
+                )}
+              </div>
+
               {msg.type === "user" && (
                 <div className="flex justify-end">
-                  <div className="bg-[#131313] border border-[#27272A] text-white px-4 py-3 rounded-none max-w-[90%]">
-                    <p className="text-sm leading-relaxed">{msg.content}</p>
+                  <div className="glass-bubble-user text-white px-4 py-3 rounded-2xl rounded-tr-none max-w-[90%] shadow-lg">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{msg.content}</p>
                     {msg.context && msg.context.items && msg.context.items.length > 0 && (
-                      <div className="mt-2">
+                      <div className="mt-2.5 pt-2 border-t border-white/5">
                         <button
                           onClick={() => setExpandedContextId(expandedContextId === msg.id ? null : msg.id)}
-                          className="text-[10px] font-technical text-[#10B981] hover:text-[#10B981]/80 flex items-center gap-1 uppercase tracking-wider"
+                          className="text-[10px] font-technical text-[#10B981] hover:text-[#10B981]/80 flex items-center gap-1.5 uppercase tracking-wider transition-colors duration-150"
                         >
-                          📎 Context ({msg.context.items.length} files) {expandedContextId === msg.id ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                          <span>📎</span>
+                          <span>Context ({msg.context.items.length})</span>
+                          {expandedContextId === msg.id ? (
+                            <ChevronUp className="h-3 w-3" />
+                          ) : (
+                            <ChevronDown className="h-3 w-3" />
+                          )}
                         </button>
                         {expandedContextId === msg.id && (
-                          <div className="mt-1.5 text-[11px] font-technical bg-[#0E0E0E] border border-[#27272A] rounded-none p-2 space-y-1.5">
+                          <div className="mt-2 text-[11px] font-technical bg-[#0E0E0E]/80 backdrop-blur-sm border border-white/5 p-2 rounded-xl space-y-1.5">
                             {msg.context.items.map((item: any, idx: number) => (
-                              <div key={idx} className="flex items-center gap-1.5">
-                                <span className="text-[#10B981]">
-                                  {item.type === "NOTE" ? "📄" : item.type === "STACK" ? "📊" : item.type === "TASK" || item.type === "TASKS" ? "✅" : "📅"}
-                                </span>
-                                <span className="font-semibold text-white truncate max-w-[150px]">{item.title || item.id}</span>
+                              <div key={idx} className="flex items-center justify-between gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded-lg border border-white/5 transition-all">
+                                <div className="flex items-center gap-2 truncate">
+                                  <span className="text-[#10B981] shrink-0 text-sm">
+                                    {contextTypeIcon[item.type] || "📄"}
+                                  </span>
+                                  <span className="font-semibold text-white truncate max-w-[130px]">
+                                    {item.title || item.id}
+                                  </span>
+                                </div>
                                 {item.source && (
-                                  <span className="text-zinc-500 text-[9px] uppercase">
-                                    ({item.source === "user_mention" ? "mention" : item.source})
+                                  <span className="text-[8px] bg-[#10B981]/10 text-[#10B981] border border-[#10B981]/20 px-1.5 py-0.5 rounded font-technical uppercase shrink-0 tracking-wider">
+                                    {item.source === "active_tab" ? "Tab" : item.source === "user_mention" ? "@Mention" : "Recent"}
                                   </span>
                                 )}
                               </div>
@@ -210,22 +306,28 @@ export default function ChatSidebar() {
                   </div>
                 </div>
               )}
+
               {msg.type === "ai" && (
                 <div className="flex justify-start">
-                  <div className="bg-[#131313] border border-[#27272A] text-white px-4 py-3 rounded-none max-w-[90%] shadow-lg">
-                    <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-[#27272A]">
-                      <div className="w-5 h-5 bg-[#10B981] text-[#0E0E0E] flex items-center justify-center font-technical font-bold text-xs">AI</div>
-                      <span className="text-[10px] font-technical text-zinc-400">SYSTEM RESPOND</span>
-                    </div>
+                  <div className={`max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-none shadow-xl border transition-all duration-300 ${
+                    msg.status === "error"
+                      ? "bg-red-500/10 border-red-500/20 text-red-400"
+                      : msg.status === "processing"
+                      ? "glass-bubble-ai border-[#10B981]/25 text-zinc-400 glow-emerald-subtle"
+                      : "glass-bubble-ai border-white/5 text-slate-200"
+                  }`}>
                     {msg.status === "processing" ? (
-                      <div className="flex items-center gap-2 text-[#10B981] font-technical text-xs py-1">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        <span className="uppercase tracking-wider">Analyzing Context...</span>
+                      <div className="flex items-center gap-3 py-1">
+                        <div className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
+                        </div>
+                        <span className="text-xs font-technical uppercase tracking-widest text-[#10B981] animate-pulse">
+                          Thinking...
+                        </span>
                       </div>
                     ) : (
-                      <div className="prose prose-invert prose-xs max-w-none text-zinc-100 font-sans leading-relaxed
-                        [&_pre]:bg-[#0E0E0E] [&_pre]:border [&_pre]:border-[#27272A] [&_pre]:rounded-none [&_pre]:p-3 [&_pre]:my-2
-                        [&_code]:font-technical [&_code]:text-xs [&_code]:text-[#10B981]">
+                      <div className="prose prose-invert prose-sm max-w-none prose-p:leading-relaxed prose-pre:bg-zinc-900/60 prose-pre:border prose-pre:border-white/5 text-slate-200">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
                       </div>
                     )}
@@ -238,69 +340,81 @@ export default function ChatSidebar() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
-      <div className="p-4 border-t border-[#27272A] bg-[#131313] flex flex-col gap-2">
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <Button
-            type="button"
-            variant="technical"
-            size="icon"
-            disabled={isProcessing}
-            onMouseDown={async () => {
-              if (!isRecording) {
-                const packed = await packContext();
-                const primary = packed.items[0];
-                const extras = new FormData();
-                extras.append("contextType", primary.type);
-                extras.append("contextId", primary.id);
-                if (primary.type === "NOTE") {
-                  extras.append("cursorPosition", cursorPosition.toString());
-                }
-                await startSTT(primary.type, primary.id, extras);
-              }
-            }}
-            onMouseUp={stopSTT}
-            onMouseLeave={isRecording ? stopSTT : undefined}
-            onTouchStart={async () => {
-              if (!isRecording) {
-                const packed = await packContext();
-                const primary = packed.items[0];
-                const extras = new FormData();
-                extras.append("contextType", primary.type);
-                extras.append("contextId", primary.id);
-                if (primary.type === "NOTE") {
-                  extras.append("cursorPosition", cursorPosition.toString());
-                }
-                await startSTT(primary.type, primary.id, extras);
-              }
-            }}
-            onTouchEnd={stopSTT}
-            className={`h-10 w-10 rounded-full transition-all flex-shrink-0 flex items-center justify-center border border-[#27272A] ${
-              isRecording ? "bg-red-500 hover:bg-red-600 text-white" : "bg-[#0E0E0E] hover:bg-[#131313] text-white"
-            }`}
-          >
-            <Mic className={`h-4 w-4 ${isRecording ? "animate-pulse" : ""}`} />
-          </Button>
-          <Input
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            placeholder="Type a command..."
-            disabled={isProcessing || isRecording}
-            className="h-10 bg-[#0E0E0E] border-[#27272A] text-sm focus-visible:border-[#10B981] rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            variant="technical"
-            disabled={!inputText.trim() || isProcessing || isRecording}
-            className="h-10 w-10 rounded-none bg-[#10B981] hover:bg-[#10B981]/90 text-[#0E0E0E] disabled:bg-zinc-800 disabled:text-zinc-500 disabled:opacity-50 flex-shrink-0"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+      {/* Input area */}
+      <div className="p-4 border-t border-white/5 bg-[#131313]/95 backdrop-blur-md shrink-0">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+          <div className="relative flex items-center bg-[#0E0E0E]/90 border border-white/10 focus-within:border-[#10B981]/50 focus-within:ring-1 focus-within:ring-[#10B981]/20 transition-all rounded-xl p-1">
+            <Input
+              id="chat-input"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder={isRecording ? "Listening…" : "Message AI Companion…"}
+              disabled={isProcessing}
+              className="flex-1 bg-transparent border-0 text-white text-sm h-10 rounded-lg placeholder:text-zinc-500 font-technical focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-0 pl-3 py-1 pr-16"
+            />
+            {/* Enter hint */}
+            {inputText.trim() && !isProcessing && (
+              <span className="absolute right-12 text-[10px] text-zinc-600 font-technical select-none flex items-center gap-0.5 mr-1.5">
+                <span>Enter</span>
+                <span className="text-[8px]">↵</span>
+              </span>
+            )}
+            {/* Send button */}
+            <Button
+              type="submit"
+              variant="ghost"
+              size="icon"
+              disabled={!inputText.trim() || isProcessing}
+              className="h-8 w-8 rounded-lg shrink-0 text-[#10B981] hover:bg-[#10B981]/15 disabled:text-zinc-700 disabled:hover:bg-transparent transition-all duration-200"
+              title="Send message"
+            >
+              {isProcessing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </div>
+
+          <div className="flex items-center justify-between text-[10px] text-zinc-500 font-technical px-1">
+            <div className="flex items-center gap-1.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={toggleRecording}
+                disabled={isProcessing}
+                className={`h-7 px-2.5 rounded-lg text-xs font-technical flex items-center gap-1.5 transition-all duration-200 ${
+                  isRecording
+                    ? "bg-[#10B981]/10 text-[#10B981] hover:bg-[#10B981]/20 border border-[#10B981]/30"
+                    : "text-zinc-400 hover:text-white hover:bg-white/5 border border-transparent"
+                }`}
+                title={isRecording ? "Stop voice input" : "Start voice input"}
+              >
+                {isSTTProcessing ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : isRecording ? (
+                  <>
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#10B981]"></span>
+                    </span>
+                    <span>Stop Mic</span>
+                  </>
+                ) : (
+                  <>
+                    <Mic className="h-3 w-3 text-zinc-500" />
+                    <span>Voice Input</span>
+                  </>
+                )}
+              </Button>
+            </div>
+            
+            <div className="uppercase tracking-widest text-[8px] text-zinc-600">
+              Flow State Active
+            </div>
+          </div>
         </form>
-        <div className="text-[10px] text-center text-zinc-500 font-technical uppercase tracking-wider">
-          Push to talk: Press <kbd className="bg-[#0E0E0E] px-1 py-0.5 border border-[#27272A] text-zinc-400">Ctrl</kbd> + <kbd className="bg-[#0E0E0E] px-1 py-0.5 border border-[#27272A] text-zinc-400">Space</kbd>
-        </div>
       </div>
     </div>
   );

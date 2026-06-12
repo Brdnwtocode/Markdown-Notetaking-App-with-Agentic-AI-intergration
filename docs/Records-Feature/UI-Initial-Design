@@ -1,0 +1,74 @@
+# Technical Specification: Lock In Records & Agentic Automate
+
+## 1. Module Overview
+The **Records** module is a high-fidelity audio workstation within the Lock In ecosystem. It manages long-form audio capture, real-time transcription, and "Agentic Automate" orchestration—routing processed data into Notes, Tasks, Stacks, and Calendars.
+
+---
+
+## 2. Visual & Branding Standards
+- **Aesthetic**: Anthropic-meets-Brutalist (High utility, technical, minimal).
+- **Core Palette**: 
+  - Surface: `#0E0E0E`
+  - Surface-Bright: `#131313`
+  - Primary Accent: `#10B981` (Emerald)
+  - Muted Borders: `#27272A`
+- **Typography**: 
+  - UI Labels: **Geist Sans** (Semi-bold, tight tracking).
+  - Technical Data/Logs: **Geist Mono** (Uppercase for status badges).
+
+---
+
+## 3. Component Architecture
+
+### 3.1 Pro Audio Workstation (Main Panel)
+- **Waveform Visualization**: Real-time canvas-based rendering of incoming audio frequencies using Emerald (`#10B981`).
+- **Sentinel Status**: Pulsing dot indicator (`animate-pulse`) with text "SENTINEL ACTIVE".
+- **Audio Toolbar**:
+  - **Playback Controls**: Play/Pause, Stop/Commit.
+  - **Speed Toggles**: 1x, 1.5x, 2x (Geist Mono buttons).
+  - **Volume Scrubber**: Technical range slider with Emerald fill.
+  - **Trim Utility**: Scissors icon trigger for audio cutting/resizing logic.
+- **Transcription Stream**: Auto-scrolling text area rendering transcription segments with timestamps in Geist Mono.
+
+### 3.2 Post-Process Workflows (Right Sidebar)
+- **Agentic Automate (Priority Node)**:
+  - **Style**: Emerald border (`2px solid #10B981`) and subtle glow (`#10B98133`).
+  - **Function**: Trigger `cross-module orchestration`.
+- **Action Items**:
+  - "Summarize to Note"
+  - "Extract Tasks"
+  - "Populate Stack"
+  - "Identify Speakers"
+- **Interaction**: Buttons should show a high-contrast hover state (`bg-[#10B981] text-[#0E0E0E]`).
+
+### 3.3 Capture Queue (Recent Sessions)
+- **Data Table**: High-density list of previous `.WAV` recordings.
+- **Status Badges (Geist Mono)**:
+  - `TRANSCRIBING`: Emerald border, pulsing.
+  - `COMMITTED`: Solid Zinc border, muted text.
+  - `RESOLVING`: Rotating sync icon.
+
+---
+
+## 4. Implementation Logic (For Coding Agent)
+
+### 4.1 Audio Processing
+- Implement `MediaRecorder` API for capture.
+- Integrate with `Deepgram` or `Whisper` for real-time STT.
+- Use `requestAnimationFrame` for high-performance waveform rendering.
+
+### 4.2 Agentic Routing (The "Brain")
+- The **Agentic Automate** trigger must bundle the transcription content and current workspace context.
+- Send payload to the NLU Resolver (Gemini/Llama) to produce multiple JSON mutations:
+  - `NoteMutation`: Summarized content.
+  - `TaskMutation[]`: Array of extracted subtasks.
+  - `StackMutation`: Mapped row data.
+
+### 4.3 Suggestion-Only Interaction
+- DO NOT commit to DB automatically.
+- Every automated action must trigger the **Confirmation Toast** (Bottom-Right) or render **Ghost Rows** in Stacks for user approval.
+
+---
+
+## 5. Implementation Prompt
+> "Implement the 'Records' audio workstation as a React functional component. Use Tailwind CSS for the 'Lock In' technical aesthetic (#0E0E0E background, #10B981 accents). Include a canvas-based waveform visualizer, a Geist Mono transcription stream, and the 'Agentic Automate' workflow panel. Ensure all audio controls (speed, volume, trim) follow the brutalist design system (sharp 4px radius, 1px borders). The 'Agentic Automate' button should be high-priority with an emerald glow."

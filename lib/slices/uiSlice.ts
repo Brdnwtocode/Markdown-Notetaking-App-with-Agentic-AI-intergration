@@ -32,19 +32,21 @@ export interface UiSlice {
   setCurrentUserId: (id: string | null) => void;
 
   // UI state
-  // UI state
   isSaving: boolean;
   setIsSaving: (saving: boolean) => void;
   cursorPosition: number;
   setCursorPosition: (pos: number) => void;
-  isVoiceMutating: boolean;
-  setIsVoiceMutating: (is: boolean) => void;
+  /** Per-entity voice mutation tracking — prevents autosave only for the entity being mutated by AI */
+  voiceMutatingIds: Set<string>;
+  addVoiceMutatingId: (id: string) => void;
+  removeVoiceMutatingId: (id: string) => void;
+  isEntityVoiceMutating: (id: string) => boolean;
   isRawMarkdownView: boolean;
   setIsRawMarkdownView: (isRaw: boolean) => void;
   toggleRawMarkdownView: () => void;
 }
 
-export const createUiSlice: StateCreator<RootStore, [], [], UiSlice> = (set) => ({
+export const createUiSlice: StateCreator<RootStore, [], [], UiSlice> = (set, get) => ({
   // Tabs
   openTabs: [],
   activeTabId: null,
@@ -123,8 +125,20 @@ export const createUiSlice: StateCreator<RootStore, [], [], UiSlice> = (set) => 
   setIsSaving: (saving) => set({ isSaving: saving }),
   cursorPosition: 0,
   setCursorPosition: (pos) => set({ cursorPosition: pos }),
-  isVoiceMutating: false,
-  setIsVoiceMutating: (is) => set({ isVoiceMutating: is }),
+  voiceMutatingIds: new Set<string>(),
+  addVoiceMutatingId: (id) => set((state) => {
+    const next = new Set(state.voiceMutatingIds);
+    next.add(id);
+    return { voiceMutatingIds: next };
+  }),
+  removeVoiceMutatingId: (id) => set((state) => {
+    const next = new Set(state.voiceMutatingIds);
+    next.delete(id);
+    return { voiceMutatingIds: next };
+  }),
+  isEntityVoiceMutating: (id) => {
+    return get().voiceMutatingIds.has(id);
+  },
   isRawMarkdownView: false,
   setIsRawMarkdownView: (is) => set({ isRawMarkdownView: is }),
   toggleRawMarkdownView: () => set((state) => ({ isRawMarkdownView: !state.isRawMarkdownView })),

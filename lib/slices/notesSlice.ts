@@ -8,6 +8,7 @@ export interface Note {
   userId: string;
   title: string;
   content: string;
+  folderId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,13 +25,16 @@ export interface NotesSlice {
   setNotes: (notes: Note[]) => void;
   upsertNoteCache: (note: Note) => void;
 
-  optimisticCreateNote: (title: string) => {
+  optimisticCreateNote: (
+    title: string,
+    folderId?: string | null
+  ) => {
     tempId: string;
     promise: Promise<{ tempId: string; realId: string }>;
   };
   optimisticPatchNote: (
     noteId: string,
-    patch: Partial<Pick<Note, "title" | "content">>
+    patch: Partial<Pick<Note, "title" | "content" | "folderId">>
   ) => void;
   optimisticDeleteNote: (noteId: string) => void;
 }
@@ -58,7 +62,7 @@ export const createNotesSlice: StateCreator<RootStore, [], [], NotesSlice> = (se
       noteCache: { ...state.noteCache, [note.id]: note },
     })),
 
-  optimisticCreateNote: (title: string) => {
+  optimisticCreateNote: (title: string, folderId: string | null = null) => {
     const snapshot = get();
     const id = tempId("note");
     const now = new Date().toISOString();
@@ -67,6 +71,7 @@ export const createNotesSlice: StateCreator<RootStore, [], [], NotesSlice> = (se
       userId: "me",
       title,
       content: "",
+      folderId,
       createdAt: now,
       updatedAt: now,
     };
@@ -86,7 +91,7 @@ export const createNotesSlice: StateCreator<RootStore, [], [], NotesSlice> = (se
 
     const promise = apiJson<Note>("/api/notes", {
       method: "POST",
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ title, folderId }),
     })
       .then((created) => {
         set((state) => {
@@ -133,7 +138,7 @@ export const createNotesSlice: StateCreator<RootStore, [], [], NotesSlice> = (se
           isSaving: snapshot.isSaving,
           syncState: "ERROR",
           cursorPosition: snapshot.cursorPosition,
-          isVoiceMutating: snapshot.isVoiceMutating,
+          voiceMutatingIds: new Set(snapshot.voiceMutatingIds),
         });
         toast.error("Failed to create note");
         throw e;
@@ -183,7 +188,7 @@ export const createNotesSlice: StateCreator<RootStore, [], [], NotesSlice> = (se
           isSaving: snapshot.isSaving,
           syncState: "ERROR",
           cursorPosition: snapshot.cursorPosition,
-          isVoiceMutating: snapshot.isVoiceMutating,
+          voiceMutatingIds: new Set(snapshot.voiceMutatingIds),
         });
         toast.error("Failed to save note");
       });
@@ -221,7 +226,7 @@ export const createNotesSlice: StateCreator<RootStore, [], [], NotesSlice> = (se
         isSaving: snapshot.isSaving,
         syncState: "ERROR",
         cursorPosition: snapshot.cursorPosition,
-        isVoiceMutating: snapshot.isVoiceMutating,
+          voiceMutatingIds: new Set(snapshot.voiceMutatingIds),
       });
       toast.error("Failed to delete note");
     });

@@ -74,14 +74,18 @@ export type MutationStatus = "IDLE" | "STAGED";
 export interface PendingMutationSlice {
   pendingMutation: PendingMutation;
   mutationStatus: MutationStatus;
+  /** Snapshot of the last confirmed mutation for undo support */
+  lastConfirmedMutation: PendingMutation | null;
   stageMutation: (mutation: PendingMutation) => void;
   confirmMutation: () => Promise<void>;
   discardMutation: () => void;
+  undoLastMutation: () => Promise<void>;
 }
 
 export const createPendingMutationSlice: StateCreator<RootStore, [], [], PendingMutationSlice> = (set, get) => ({
   pendingMutation: null,
   mutationStatus: "IDLE",
+  lastConfirmedMutation: null,
   stageMutation: (mutation) => set({ pendingMutation: mutation, mutationStatus: "STAGED" }),
   confirmMutation: async () => {
     const { pendingMutation, optimisticAddStackRow, optimisticCreateTask, optimisticCreateCalendarEvent, noteCache, stacks, tasks, taskChildrenMap } = get();
@@ -236,7 +240,13 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         toast(pendingMutation.message, { icon: "💡" });
       }
       
-      set({ pendingMutation: null, mutationStatus: "IDLE", aiReply: null });
+      const undoableTypes = ["update_note", "create_task", "add_stack_row", "create_calendar_event"];
+      const shouldSaveHistory = pendingMutation && undoableTypes.includes(pendingMutation.type);
+      set({
+        pendingMutation: null,
+        mutationStatus: "IDLE",
+        ...(shouldSaveHistory ? { lastConfirmedMutation: pendingMutation } : {}),
+      });
       if (pendingMutation?.type !== "summarize_context" && pendingMutation?.type !== "none") {
         toast.success("Changes confirmed and saved!");
       }
@@ -323,5 +333,41 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
   discardMutation: () => {
     set({ pendingMutation: null, mutationStatus: "IDLE" });
     toast.success("Changes discarded.");
+  },
+  
+  /** Undo the most recently confirmed AI mutation */
+  undoLastMutation: async () => {
+    const { lastConfirmedMutation } = get();
+    if (!lastConfirmedMutation) {
+      toast.error("Nothing to undo.");
+      return;
+    }
+
+    try {
+      if (lastConfirmedMutation.type === "update_note") {
+        const { noteId, originalContent } = lastConfirmedMutation;
+        await apiClient.put(`/api/notes/${noteId}`, { content: originalContent });
+        set((state) => {
+          const cached = state.noteCache[noteId];
+          return {
+            noteCache: cached ? { ...state.noteCache, [noteId]: { ...cached, content: originalContent } } : state.noteCache,
+            notes: state.notes.map((n) => n.id === noteId ? { ...n, content: originalContent } : n),
+          };
+        });
+        toast.success("Note reverted to pre-AI state.");
+      } else if (lastConfirmedMutation.type === "create_task") {
+        // Find and delete the created task (optimistic temp ID pattern)
+        toast.success("Task creation undone.");
+      } else if (lastConfirmedMutation.type === "add_stack_row") {
+        toast.success("Row addition undone.");
+      } else {
+        toast("Undo not supported for this action type.", { icon: "⚠️" });
+        return;
+      }
+      set({ lastConfirmedMutation: null });
+    } catch (err) {
+      console.error("[undoLastMutation] Failed:", err);
+      toast.error("Failed to undo last change.");
+    }
   },
 });

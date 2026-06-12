@@ -6,7 +6,7 @@ import * as Diff from "diff";
 import { useEffect, useState } from "react";
 
 export default function UniversalConfirmationToast() {
-  const { pendingMutation, confirmMutation, discardMutation, isChatOpen } = useWorkspaceStore();
+  const { pendingMutation, confirmMutation, discardMutation, undoLastMutation, lastConfirmedMutation, isChatOpen } = useWorkspaceStore();
   const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
@@ -64,10 +64,13 @@ export default function UniversalConfirmationToast() {
     summary = `Review proposed task ${actionStr}: "${pendingMutation.data?.title || "Untitled"}"`;
   }
 
+  const rightOffset = isChatOpen ? "right-[344px] md:right-[408px]" : "right-6";
+
   return (
-    <div className={`fixed bottom-24 z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 transition-all ${
-      isChatOpen ? "right-[344px] md:right-[408px]" : "right-6"
-    }`}>
+    <div className={`fixed z-50 animate-in fade-in slide-in-from-bottom-5 duration-300 transition-all ${
+      rightOffset
+    }`}
+      style={{ bottom: "calc(6rem + 4px)" }}>
       <div className="w-[350px] bg-[#131313] border border-[#27272A] rounded-sm p-4 shadow-[0_0_15px_rgba(16,185,129,0.1)] flex flex-col gap-3">
         {/* Header */}
         <div className="flex items-center gap-2">
@@ -101,6 +104,19 @@ export default function UniversalConfirmationToast() {
           </button>
         </div>
       </div>
+
+      {/* Undo toast — shown after confirming a mutation */}
+      {lastConfirmedMutation && (
+        <div className="mt-2 w-[350px] bg-[#131313] border border-[#27272A] rounded-sm p-3 shadow-[0_0_15px_rgba(16,185,129,0.1)] flex items-center justify-between">
+          <span className="text-xs text-zinc-400">Change applied.</span>
+          <button
+            onClick={() => undoLastMutation()}
+            className="text-xs font-semibold text-[#10B981] hover:text-[#10B981]/80 uppercase tracking-wider transition-colors"
+          >
+            Undo
+          </button>
+        </div>
+      )}
     </div>
   );
 }

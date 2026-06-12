@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
+import Link from "next/link";
 import { ArrowRight, Zap, Mic, BookOpen, Play, Mail, Github } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import LoginForm from "@/components/auth/LoginForm";
 import RegisterForm from "@/components/auth/RegisterForm";
+import { PrimaryLogo } from "@/components/shared/BrandAssets";
 
 const words = ["Train", "Research", "Track", "Organize", "Study"];
 
@@ -40,7 +42,7 @@ export default function LandingPage() {
   }, [currentText, isDeleting, currentWordIndex]);
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0E0E0E] text-white font- technical selection:bg-[#10B981]/30 selection:text-[#10B981]">
+    <div className="flex min-h-screen flex-col bg-[#0E0E0E] text-white font-sans selection:bg-[#10B981]/30 selection:text-[#10B981]">
       <style>{`
         @keyframes blink {
           50% { border-color: transparent }
@@ -53,13 +55,16 @@ export default function LandingPage() {
       {/* Header */}
       <header className="border-b border-[#27272A] bg-[#0E0E0E]/95 backdrop-blur supports-[backdrop-filter]:bg-[#0E0E0E]/60 sticky top-0 z-50">
         <div className="container flex h-16 items-center justify-between py-4 max-w-6xl mx-auto px-4">
-          <div className="flex items-center gap-2">
-            <span className="w-1.5 h-6 bg-[#10B981]"></span>
-            <div className="font-bold text-lg uppercase tracking-wider font-mono">
-              LOCK IN // MD
-            </div>
+          <div className="flex items-center">
+            <PrimaryLogo className="h-8 w-auto" />
           </div>
           <div className="flex gap-3">
+            <Link
+              href="/presentation"
+              className="border border-[#27272A] text-zinc-300 hover:text-white hover:bg-[#10B981]/5 hover:border-[#10B981]/50 rounded-none px-4 py-2 font-mono text-[11px] uppercase tracking-wider font-bold transition-all flex items-center gap-2"
+            >
+              <Play className="h-3 w-3 fill-current text-[#10B981]" /> Slides
+            </Link>
             <button
               onClick={() => setAuthMode("login")}
               className="border border-[#27272A] text-zinc-300 hover:text-white hover:bg-white/5 hover:border-zinc-500 rounded-none px-4 py-2 font-mono text-[11px] uppercase tracking-wider font-bold transition-all flex items-center gap-2"
@@ -107,19 +112,25 @@ export default function LandingPage() {
               Capture technical schemas, compile structures dynamically, and execute hands-free commands with high-density voice AI.
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-6 max-w-md mx-auto">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center pt-6 max-w-xl mx-auto">
               <button
                 onClick={() => setAuthMode("register")}
-                className="flex-1 h-12 bg-white hover:bg-white/90 text-[#0E0E0E] rounded-none font-mono text-xs uppercase tracking-wider font-bold transition-all flex items-center justify-center gap-2"
+                className="flex-grow h-12 bg-white hover:bg-white/90 text-[#0E0E0E] rounded-none font-mono text-xs uppercase tracking-wider font-bold transition-all flex items-center justify-center gap-2"
               >
                 Get Started <ArrowRight className="h-4 w-4" />
               </button>
               <button
                 onClick={() => setAuthMode("login")}
-                className="flex-1 h-12 border border-[#27272A] hover:bg-white/5 hover:border-zinc-500 text-white rounded-none font-mono text-xs uppercase tracking-wider font-semibold transition-all flex items-center justify-center gap-2"
+                className="flex-grow h-12 border border-[#27272A] hover:bg-white/5 hover:border-zinc-500 text-white rounded-none font-mono text-xs uppercase tracking-wider font-semibold transition-all flex items-center justify-center gap-2"
               >
                 <Play className="h-3.5 w-3.5 fill-current text-[#10B981]" /> Sign In
               </button>
+              <Link
+                href="/presentation"
+                className="flex-grow h-12 border border-[#27272A] hover:text-[#10B981] hover:border-[#10B981]/50 hover:bg-[#10B981]/5 text-zinc-300 rounded-none font-mono text-xs uppercase tracking-wider font-semibold transition-all flex items-center justify-center gap-2"
+              >
+                <Play className="h-3 w-3 fill-current text-[#10B981]" /> Slide Presentation
+              </Link>
             </div>
           </div>
         </section>

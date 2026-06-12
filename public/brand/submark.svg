@@ -1,0 +1,10 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="64" cy="64" r="62" fill="none" stroke="#27272A" stroke-width="1"/>
+  <circle cx="64" cy="64" r="58" fill="none" stroke="#10B981" stroke-width="0.5" stroke-dasharray="2 2"/>
+  <!-- Icon centered -->
+  <g transform="translate(39, 34)" shape-rendering="geometricPrecision">
+    <path d="M0 15V0H30V10H10V50H0V15Z" fill="#10B981" />
+    <path d="M50 35V50H20V40H40V0H50V35Z" fill="#10B981" />
+  </g>
+  <text x="64" y="105" text-anchor="middle" font-family="Geist Mono, monospace" font-size="16" font-weight="700" fill="#FFFFFF">LI</text>
+</svg>

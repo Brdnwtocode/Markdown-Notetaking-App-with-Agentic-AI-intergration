@@ -54,6 +54,7 @@ export async function PUT(
     const schema = z.object({
       title: z.string().optional(),
       content: z.string().optional(),
+      folderId: z.string().nullable().optional(),
     });
 
     const body = await request.json();
@@ -66,13 +67,14 @@ export async function PUT(
       );
     }
 
-    const { title, content } = result.data;
+    const { title, content, folderId } = result.data;
 
     const updated = await prisma.note.update({
       where: { id: params.id },
       data: {
         ...(title !== undefined && { title }),
         ...(content !== undefined && { content }),
+        ...(folderId !== undefined && { folderId }),
       },
     });
 

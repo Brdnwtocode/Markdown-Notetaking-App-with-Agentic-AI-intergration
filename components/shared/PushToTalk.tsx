@@ -1,8 +1,8 @@
 // components/shared/PushToTalk.tsx
 //
 // Thin UI shell for Push-to-Talk voice commands.
-//   - Keyboard binding: Ctrl+Space (press to talk, release to stop)
-//   - STT via Deepgram (streaming)
+//   - Keyboard binding: Ctrl+Space (press to talk, release Space to stop)
+//   - STT via Deepgram (streaming) with fallback
 //   - Delegates context packing → lib/voice/contextHelpers
 //   - Delegates form building  → lib/voice/buildFormData
 //   - Delegates response handling → lib/voice/handleResponseActions
@@ -11,7 +11,7 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Mic } from "lucide-react";
+import { Mic, MicOff, Loader2 } from "lucide-react";
 import { useWorkspaceStore } from "@/lib/store";
 import { useDeepgramSTT, STTStatus } from "@/lib/hooks/useDeepgramSTT";
 import { packContext } from "@/lib/voice/contextHelpers";
@@ -24,11 +24,17 @@ export default function PushToTalk() {
   const store = useWorkspaceStore();
   const {
     setIsRecording, recordingTranscript, setRecordingTranscript,
-    setIsVoiceMutating, setIsChatOpen,
+    setIsChatOpen,
     addChatMessage, updateChatMessage,
     noteCache, stacks,
-    setAiReply,
+    addVoiceMutatingId, removeVoiceMutatingId,
+    setSttStatus,
   } = store;
+
+  // Determine which entity is being mutated based on active context
+  const getActiveEntityId = useCallback((): string | null => {
+    return store.currentNoteId || store.currentStackId || store.currentFocusedTaskId || "workspace";
+  }, [store]);
 
   // ─── Transcript → API pipeline ───────────────────────────────────────
 
@@ -36,15 +42,17 @@ export default function PushToTalk() {
     async (transcript: string) => {
       if (!transcript.trim()) return;
 
-      setIsVoiceMutating(true);
+      const entityId = getActiveEntityId();
+      if (entityId) addVoiceMutatingId(entityId);
       setRecordingTranscript(transcript);
       setIsChatOpen(true);
 
-      toast.loading("Processing voice command...", { id: "voice-processing" });
+      toast.loading("Transcribing & analyzing…", { id: "voice-processing" });
 
       let aiMsgId: string | null = null;
       try {
         // 1. Pack context
+        toast.loading("Packing context…", { id: "voice-processing" });
         const packedContext = await packContext(transcript);
 
         // 2. Add user chat message
@@ -68,6 +76,7 @@ export default function PushToTalk() {
         });
 
         // 4. Build & send FormData
+        toast.loading("AI is thinking…", { id: "voice-processing" });
         const form = buildVoiceFormData(transcript, packedContext, getFormDataContext());
 
         const res = await apiClient.post("/api/voice/process", form, {
@@ -87,8 +96,6 @@ export default function PushToTalk() {
         });
 
         updateChatMessage(aiMsgId, { content: replyContent, status: "completed" });
-        if (res.data.aiReply) setAiReply(res.data.aiReply);
-
         toast.dismiss("voice-processing");
       } catch (err: unknown) {
         console.error("[PushToTalk] Pipeline failed:", err);
@@ -107,13 +114,11 @@ export default function PushToTalk() {
         if (aiMsgId) updateChatMessage(aiMsgId, { content: msg, status: "error" });
         toast.error(msg);
       } finally {
-        setIsVoiceMutating(false);
+        if (entityId) removeVoiceMutatingId(entityId);
       }
     },
-    // Stable store refs — Zustand selectors are stable
-    [setIsVoiceMutating, setRecordingTranscript, setIsChatOpen,
-     addChatMessage, updateChatMessage, setAiReply, noteCache, stacks,
-     store]
+    [getActiveEntityId, addVoiceMutatingId, removeVoiceMutatingId, setRecordingTranscript, setIsChatOpen,
+     addChatMessage, updateChatMessage, noteCache, stacks, store]
   );
 
   // ─── STT hook ──────────────────────────────────────────────────────
@@ -121,8 +126,14 @@ export default function PushToTalk() {
   const { status, start, stop } = useDeepgramSTT({
     language: "vi",
     model: "nova-3",
-    onInterimTranscript: (text) => setRecordingTranscript(text),
-    onTranscriptReady: handleTranscriptReady,
+    onInterimTranscript: (text) => {
+      setRecordingTranscript(text);
+      setSttStatus(status);
+    },
+    onTranscriptReady: (text) => {
+      setSttStatus("finalizing");
+      handleTranscriptReady(text);
+    },
   });
 
   // ─── Start / Stop handlers ─────────────────────────────────────────
@@ -143,8 +154,9 @@ export default function PushToTalk() {
 
     setIsRecording(true);
     setRecordingTranscript("");
+    setSttStatus("minting");
     await start(primary.type, primary.id, extras);
-  }, [status, setIsRecording, setRecordingTranscript, start, store]);
+  }, [status, setIsRecording, setRecordingTranscript, start, store, setSttStatus]);
 
   const handleStop = useCallback(async () => {
     if (status === "idle") return;
@@ -153,7 +165,10 @@ export default function PushToTalk() {
   }, [status, setIsRecording, stop]);
 
   // ─── Keyboard binding (Ctrl+Space) ─────────────────────────────────
+  // FIXED: Only Space keyup triggers stop, not arbitrary Control release.
+  // This prevents false stops during Ctrl+C/V/Z editing operations.
 
+  const spaceHeldRef = useRef(false);
   const handleStartRef = useRef(handleStart);
   const handleStopRef = useRef(handleStop);
   handleStartRef.current = handleStart;
@@ -163,11 +178,13 @@ export default function PushToTalk() {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space" && e.ctrlKey && !e.repeat) {
         e.preventDefault();
+        spaceHeldRef.current = true;
         handleStartRef.current();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code === "Space" || e.key === "Control") {
+      if (e.code === "Space" && spaceHeldRef.current) {
+        spaceHeldRef.current = false;
         handleStopRef.current();
       }
     };
@@ -192,45 +209,87 @@ export default function PushToTalk() {
     fallback: "Processing (batch)…",
   };
 
+  const isIdle = status === "idle";
+
   // ─── Render ────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed bottom-6 right-6 group flex flex-col items-center gap-3">
+    <div className="fixed bottom-6 right-6 group flex flex-col items-center gap-3 z-50">
+      {/* Transcript / Status bubble */}
       {(isActive || recordingTranscript) && (
-        <div className="flex flex-col items-center gap-2 bg-charcoal/90 text-on-dark text-xs font-medium px-4 py-2 rounded-2xl shadow-2xl pointer-events-none select-none transition-all duration-300 max-w-[300px] w-max">
-          {isActive && statusLabel[status] && (
-            <span className="text-purple-400 animate-pulse">{statusLabel[status]}</span>
-          )}
+        <div className="flex flex-col items-center gap-2.5 glass-card text-white text-xs font-medium px-4 py-3.5 shadow-2xl rounded-2xl pointer-events-none select-none transition-all duration-300 max-w-[320px] w-max border-white/10 glow-emerald-subtle">
+          {isProcessing ? (
+            <div className="flex items-center gap-2 text-[#10B981]">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span className="font-technical uppercase tracking-wider text-[10px]">
+                {statusLabel[status]}
+              </span>
+            </div>
+          ) : status === "streaming" ? (
+            <div className="flex flex-col items-center gap-2.5">
+              <div className="flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
+                </span>
+                <span className="text-[#10B981] font-technical uppercase tracking-wider text-[10px]">
+                  Listening…
+                </span>
+              </div>
+              {/* Soundwave Jumping Bar Indicator */}
+              <div className="flex items-end gap-1 h-8 px-2 py-0.5 border border-white/5 bg-black/30 rounded-lg">
+                <div className="w-[3px] bg-[#10B981] rounded-full animate-soundwave-1"></div>
+                <div className="w-[3px] bg-[#10B981] rounded-full animate-soundwave-2"></div>
+                <div className="w-[3px] bg-[#10B981] rounded-full animate-soundwave-3"></div>
+                <div className="w-[3px] bg-[#10B981] rounded-full animate-soundwave-4"></div>
+                <div className="w-[3px] bg-[#10B981] rounded-full animate-soundwave-2"></div>
+                <div className="w-[3px] bg-[#10B981] rounded-full animate-soundwave-3"></div>
+              </div>
+            </div>
+          ) : null}
           {recordingTranscript && (
-            <span className="text-slate-300 break-words text-center line-clamp-3">
-              {recordingTranscript}
-            </span>
-          )}
-          {isProcessing && (
-            <span className="w-32 h-1 bg-zinc-800 rounded-full overflow-hidden">
-              <span className="block h-full bg-purple-500 animate-progress" />
-            </span>
+            <p className="text-slate-300 text-sm leading-relaxed max-w-[280px] break-words text-center font-technical py-1">
+              &ldquo;{recordingTranscript}&rdquo;
+            </p>
           )}
         </div>
       )}
 
-      <Button
-        onMouseDown={handleStart}
-        onMouseUp={handleStop}
-        onMouseLeave={isActive ? handleStop : undefined}
-        onTouchStart={handleStart}
-        onTouchEnd={handleStop}
-        disabled={isProcessing}
-        size="lg"
-        className={`rounded-full w-16 h-16 p-0 transition-all duration-300 shadow-2xl ${
-          isActive
-            ? "bg-red-500 hover:bg-red-600 scale-110 shadow-red-500/40"
-            : "bg-purple-600 hover:bg-purple-700 shadow-purple-600/40 hover:scale-105"
-        }`}
-        aria-label={isActive ? "Stop recording" : "Start recording"}
-      >
-        <Mic className={`h-6 w-6 transition-colors ${isActive ? "text-white" : "text-purple-100"}`} />
-      </Button>
+      {/* PTT Button with Concentric Glowing Ripples */}
+      <div className="relative">
+        {isActive && (
+          <>
+            <div className="absolute inset-0 rounded-full border border-[#10B981] animate-ripple opacity-60 pointer-events-none" />
+            <div className="absolute inset-0 rounded-full border border-[#10B981]/50 animate-ripple opacity-40 pointer-events-none [animation-delay:0.7s]" />
+          </>
+        )}
+        <Button
+          onClick={isIdle ? handleStart : handleStop}
+          variant={isActive ? "default" : "secondary"}
+          size="icon"
+          className={`h-14 w-14 rounded-full shadow-xl transition-all duration-300 relative z-10 ${
+            isActive
+              ? "bg-[#10B981] hover:bg-[#10B981]/90 text-[#0E0E0E] scale-110 glow-emerald-strong"
+              : "bg-[#131313] border border-white/10 hover:border-[#10B981]/40 hover:bg-[#1c1c1c] text-zinc-400 hover:text-white"
+          }`}
+          title="Hold Ctrl+Space or click to talk"
+        >
+          {isProcessing ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : isActive ? (
+            <MicOff className="h-5 w-5" />
+          ) : (
+            <Mic className="h-5 w-5" />
+          )}
+        </Button>
+      </div>
+
+      {/* Keyboard shortcut hint */}
+      {isIdle && (
+        <span className="text-[10px] text-zinc-600 font-technical uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity duration-200 select-none">
+          Ctrl+Space
+        </span>
+      )}
     </div>
   );
 }

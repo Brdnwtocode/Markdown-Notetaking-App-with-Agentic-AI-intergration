@@ -21,6 +21,25 @@ export function adjustCursorPosition(content: string, pos: number): number {
       adjusted = Math.max(adjusted, end);
     }
   }
+  
+  // Guard against inserting in the middle of a word.
+  // If the position is between two word characters, move to the next word boundary.
+  if (adjusted > 0 && adjusted < content.length) {
+    const charBefore = content[adjusted - 1];
+    const charAfter = content[adjusted];
+    
+    // Check if we're in the middle of a word (both sides are word characters)
+    const isWordChar = (c: string) => /\w/.test(c);
+    if (isWordChar(charBefore) && isWordChar(charAfter)) {
+      // Find the next word boundary (end of current word)
+      let newPos = adjusted;
+      while (newPos < content.length && isWordChar(content[newPos])) {
+        newPos++;
+      }
+      adjusted = newPos;
+    }
+  }
+  
   return adjusted;
 }
 

@@ -9,6 +9,9 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs"; // fetch to Deepgram needs full Node runtime
 
+// Cache project ID across invocations to avoid an extra API call per session
+let cachedProjectId: string | null = null;
+
 export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
@@ -22,31 +25,35 @@ export async function GET() {
   }
 
   try {
-    // 1. Get the list of projects to find the project ID
-    const projectsResponse = await fetch("https://api.deepgram.com/v1/projects", {
-      method: "GET",
-      headers: {
-        Authorization: `Token ${apiKey}`,
-      },
-    });
-
-    if (!projectsResponse.ok) {
-      const errorText = await projectsResponse.text();
-      console.error("Failed to list Deepgram projects:", projectsResponse.status, errorText);
-      return NextResponse.json(
-        { error: "Failed to list Deepgram projects" },
-        { status: 502 }
-      );
-    }
-
-    const projectsData = await projectsResponse.json();
-    const projectId = projectsData.projects?.[0]?.project_id;
+    // 1. Get the project ID (cached after first lookup)
+    let projectId = cachedProjectId;
     if (!projectId) {
-      console.error("No Deepgram projects found for the provided API key");
-      return NextResponse.json(
-        { error: "No Deepgram project found" },
-        { status: 502 }
-      );
+      const projectsResponse = await fetch("https://api.deepgram.com/v1/projects", {
+        method: "GET",
+        headers: {
+          Authorization: `Token ${apiKey}`,
+        },
+      });
+
+      if (!projectsResponse.ok) {
+        const errorText = await projectsResponse.text();
+        console.error("Failed to list Deepgram projects:", projectsResponse.status, errorText);
+        return NextResponse.json(
+          { error: "Failed to list Deepgram projects" },
+          { status: 502 }
+        );
+      }
+
+      const projectsData = await projectsResponse.json();
+      projectId = projectsData.projects?.[0]?.project_id;
+      if (!projectId) {
+        console.error("No Deepgram projects found for the provided API key");
+        return NextResponse.json(
+          { error: "No Deepgram project found" },
+          { status: 502 }
+        );
+      }
+      cachedProjectId = projectId;
     }
 
     // 2. Generate a temporary project API key that expires in 60 seconds

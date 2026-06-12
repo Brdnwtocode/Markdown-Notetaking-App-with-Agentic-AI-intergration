@@ -21,6 +21,7 @@ export interface Stack {
   id: string;
   userId: string;
   name: string;
+  folderId: string | null;
   columns: StackColumn[];
   rows: StackRow[];
   createdAt: string;
@@ -44,6 +45,7 @@ export interface StacksSlice {
   setFocusedColumn: (columnId: string | null) => void;
 
   optimisticRenameStack: (stackId: string, name: string) => void;
+  optimisticMoveStack: (stackId: string, folderId: string | null) => void;
   optimisticAddStackRow: (
     stackId: string,
     data: Record<string, any>
@@ -113,9 +115,44 @@ export const createStacksSlice: StateCreator<RootStore, [], [], StacksSlice> = (
           isSaving: snapshot.isSaving,
           syncState: "ERROR",
           cursorPosition: snapshot.cursorPosition,
-          isVoiceMutating: snapshot.isVoiceMutating,
+          voiceMutatingIds: new Set(snapshot.voiceMutatingIds),
         });
         toast.error("Failed to update stack name");
+      });
+  },
+
+  optimisticMoveStack: (stackId, folderId) => {
+    const snapshot = get();
+    set((state) => ({
+      stacks: state.stacks.map((s) => (s.id === stackId ? { ...s, folderId } : s)),
+      syncState: "SAVING",
+      isSaving: true,
+    }));
+
+    void apiJson(`/api/stacks/${stackId}`, {
+      method: "PUT",
+      body: JSON.stringify({ folderId }),
+    })
+      .then(() => {
+        set({ syncState: "SAVED", isSaving: false });
+      })
+      .catch(() => {
+        set({
+          notes: snapshot.notes,
+          noteCache: snapshot.noteCache,
+          currentNoteId: snapshot.currentNoteId,
+          openTabs: snapshot.openTabs,
+          activeTabId: snapshot.activeTabId,
+          stacks: snapshot.stacks,
+          currentStackId: snapshot.currentStackId,
+          isRecording: snapshot.isRecording,
+          recordingTranscript: snapshot.recordingTranscript,
+          isSaving: snapshot.isSaving,
+          syncState: "ERROR",
+          cursorPosition: snapshot.cursorPosition,
+          voiceMutatingIds: new Set(snapshot.voiceMutatingIds),
+        });
+        toast.error("Failed to move stack");
       });
   },
 
@@ -164,7 +201,7 @@ export const createStacksSlice: StateCreator<RootStore, [], [], StacksSlice> = (
           isSaving: snapshot.isSaving,
           syncState: "ERROR",
           cursorPosition: snapshot.cursorPosition,
-          isVoiceMutating: snapshot.isVoiceMutating,
+          voiceMutatingIds: new Set(snapshot.voiceMutatingIds),
         });
         toast.error("Failed to add row");
       });
@@ -205,7 +242,7 @@ export const createStacksSlice: StateCreator<RootStore, [], [], StacksSlice> = (
           isSaving: snapshot.isSaving,
           syncState: "ERROR",
           cursorPosition: snapshot.cursorPosition,
-          isVoiceMutating: snapshot.isVoiceMutating,
+          voiceMutatingIds: new Set(snapshot.voiceMutatingIds),
         });
         toast.error("Failed to update row");
       });
@@ -245,7 +282,7 @@ export const createStacksSlice: StateCreator<RootStore, [], [], StacksSlice> = (
           isSaving: snapshot.isSaving,
           syncState: "ERROR",
           cursorPosition: snapshot.cursorPosition,
-          isVoiceMutating: snapshot.isVoiceMutating,
+          voiceMutatingIds: new Set(snapshot.voiceMutatingIds),
         });
         toast.error("Failed to delete row");
       });

@@ -1,0 +1,12 @@
+<svg width="400" height="120" viewBox="0 0 400 120" xmlns="http://www.w3.org/2000/svg">
+  <rect width="400" height="120" fill="none"/>
+  <!-- Logo Icon: Interlocking L-shapes -->
+  <g transform="translate(20, 25)" shape-rendering="geometricPrecision">
+    <path d="M0 15V0H30V10H10V50H0V15Z" fill="#10B981" />
+    <path d="M50 35V50H20V40H40V0H50V35Z" fill="#10B981" />
+  </g>
+  <!-- Wordmark -->
+  <text x="90" y="65" font-family="Geist, Inter, sans-serif" font-size="52" font-weight="800" letter-spacing="-2" fill="#FFFFFF">Lock In</text>
+  <!-- Tagline -->
+  <text x="92" y="95" font-family="Geist Mono, monospace" font-size="12" font-weight="500" letter-spacing="4" fill="#A1A1AA">FLOW STATE ACTIVE</text>
+</svg>

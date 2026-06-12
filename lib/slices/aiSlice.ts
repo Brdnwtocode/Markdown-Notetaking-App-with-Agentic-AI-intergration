@@ -26,11 +26,7 @@ export type ChatMessage = {
 };
 
 export interface AiSlice {
-  // AI Conversational UI (legacy)
-  aiReply: string | null;
-  setAiReply: (reply: string | null) => void;
-  
-  // Chat UI (new)
+  // Chat UI
   isChatOpen: boolean;
   setIsChatOpen: (open: boolean) => void;
   chatMessages: ChatMessage[];
@@ -40,11 +36,7 @@ export interface AiSlice {
 };
 
 export const createAiSlice: StateCreator<RootStore, [], [], AiSlice> = (set) => ({
-  // AI Conversational UI (legacy)
-  aiReply: null,
-  setAiReply: (reply) => set({ aiReply: reply }),
-  
-  // Chat UI (new)
+  // Chat UI
   isChatOpen: false,
   setIsChatOpen: (open) => set({ isChatOpen: open }),
   chatMessages: [],

@@ -20,9 +20,10 @@ model User {
   sessions      Session[]
   refreshTokens RefreshToken[]
 
-  notes  Note[]
-  stacks Stack[]
-  tasks  Task[]
+  notes   Note[]
+  stacks  Stack[]
+  folders Folder[]
+  tasks   Task[]
   calendarEvents CalendarEvent[]
 
   createdAt DateTime @default(now())
@@ -30,9 +31,11 @@ model User {
 }
 
 model Note {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId String?
+  folder   Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
 
   title   String
   content String @db.Text
@@ -42,9 +45,11 @@ model Note {
 }
 
 model Stack {
-  id     String @id @default(uuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String   @id @default(uuid())
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folderId String?
+  folder   Folder?  @relation(fields: [folderId], references: [id], onDelete: Cascade)
 
   name    String
   columns StackColumn[]
@@ -52,6 +57,22 @@ model Stack {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Folder {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Folder?  @relation("FolderSubfolders", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Folder[] @relation("FolderSubfolders")
+  notes     Note[]
+  stacks    Stack[]
+
+  @@index([userId])
 }
 
 enum DataType {

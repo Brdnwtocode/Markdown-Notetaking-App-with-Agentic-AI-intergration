@@ -73,19 +73,24 @@ export async function PUT(
     name,
     columns,
     rows,
+    folderId,
   } = body as {
     name?: string;
     columns?: Array<{ id?: string; name: string; type: string; order?: number }>;
     rows?: Array<{ id?: string; data: Record<string, any> }>;
+    folderId?: string | null;
   };
 
   // Start transaction for bulk update
   const stack = await prisma.$transaction(async (tx) => {
-    // Update stack name if provided
-    if (name) {
+    // Update stack name or folderId if provided
+    if (name || folderId !== undefined) {
       await tx.stack.update({
         where: { id: params.id, userId: session.user.id },
-        data: { name: name.trim() },
+        data: {
+          ...(name && { name: name.trim() }),
+          ...(folderId !== undefined && { folderId }),
+        },
       });
     }
 

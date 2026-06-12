@@ -15,7 +15,7 @@ export const metadata: Metadata = {
   title: "Markdown Notetaking App",
   description: "A multimodal AI-powered notetaking workspace",
   icons: {
-    icon: "/favicon.ico",
+    icon: "/brand/favicon.svg",
   },
 };
 

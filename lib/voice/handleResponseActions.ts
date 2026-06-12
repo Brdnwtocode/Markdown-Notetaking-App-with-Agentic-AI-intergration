@@ -46,11 +46,11 @@ export function handleResponseActions(
   // ── Actions with no updatedData ──
   switch (action) {
     case "summarize_context":
-      return aiReply || "Summary generated.";
+      return aiReply || "Summary could not be generated. Please try with more specific context.";
     case "none":
-      return aiReply || "Please provide more context.";
+      return aiReply || "I couldn't determine what action to take. Try being more specific about what you want to create or modify.";
     default:
-      return aiReply || "Done!";
+      return aiReply || "Action completed, but no details were returned. Check your workspace for changes.";
   }
 }
 

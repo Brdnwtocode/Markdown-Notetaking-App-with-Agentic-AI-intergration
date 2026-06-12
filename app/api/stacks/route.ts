@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
 
     const schema = z.object({
       name: z.string().min(1),
+      folderId: z.string().nullable().optional(),
       columns: z.array(z.object({
         name: z.string().min(1),
         type: z.enum(["TEXT", "INT", "FLOAT", "BOOLEAN"]),
@@ -57,12 +58,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, columns } = result.data;
+    const { name, columns, folderId } = result.data;
 
     const stack = await prisma.stack.create({
       data: {
         userId: session.user.id,
         name,
+        folderId: folderId || null,
         columns: {
           create: columns.map((col, i) => ({
             name: col.name,

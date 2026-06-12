@@ -62,7 +62,7 @@ const TooltipMenu = ({ toolbarRef }: { toolbarRef: React.RefObject<HTMLDivElemen
 };
 
 const EditorComponent = ({ content, noteId }: { content: string; noteId: string }) => {
-  const { setIsSaving, isVoiceMutating, optimisticPatchNote, cursorPosition, setCursorPosition } = useWorkspaceStore();
+  const { setIsSaving, isEntityVoiceMutating, optimisticPatchNote, cursorPosition, setCursorPosition } = useWorkspaceStore();
   const autoSaveTimer = useRef<NodeJS.Timeout>();
   const isFirstMount = useRef(true);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -206,7 +206,7 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
             return;
           }
 
-          if (isVoiceMutating) return; // block autosave while voice is processing
+          if (isEntityVoiceMutating(noteId)) return; // block autosave while voice is processing
 
           setIsSaving(true);
 
@@ -236,6 +236,8 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
 };
 
 // ─── Visual Diff Overlay ─────────────────────────────────────────────────
+// Shows ONLY changed regions (not the entire note) with inline highlighting.
+// Uses line-level diff for better markdown readability.
 
 interface DiffOverlayProps {
   originalContent: string;
@@ -243,66 +245,86 @@ interface DiffOverlayProps {
 }
 
 const DiffOverlay = ({ originalContent, newContent }: DiffOverlayProps) => {
-  const diffs = Diff.diffWordsWithSpace(originalContent, newContent);
+  // Use line-level diff for markdown — word-level splits markdown syntax tokens
+  const diffs = Diff.diffLines(originalContent, newContent);
 
-  // Group diff parts by paragraph (split by newlines)
-  const paragraphs: Diff.Change[][] = [[]];
+  // Count statistics
+  let addedLines = 0;
+  let removedLines = 0;
   diffs.forEach((part) => {
-    const lines = part.value.split("\n");
-    lines.forEach((line, index) => {
-      if (index > 0) {
-        paragraphs.push([]);
-      }
-      if (line !== "") {
-        paragraphs[paragraphs.length - 1].push({
-          ...part,
-          value: line,
-        });
-      }
-    });
+    const lines = part.value.split("\n").filter((l) => l.length > 0);
+    if (part.added) addedLines += lines.length;
+    if (part.removed) removedLines += lines.length;
   });
 
+  // Filter to only show changed regions (context of 1 unchanged line around changes)
+  const visibleDiffs: (Diff.Change & { skipped?: boolean })[] = [];
+  for (let i = 0; i < diffs.length; i++) {
+    const part = diffs[i];
+    const hasChanges = part.added || part.removed;
+    const prevChanged = i > 0 && (diffs[i - 1].added || diffs[i - 1].removed);
+    const nextChanged = i < diffs.length - 1 && (diffs[i + 1].added || diffs[i + 1].removed);
+
+    if (hasChanges || prevChanged || nextChanged) {
+      visibleDiffs.push(part);
+    } else if (visibleDiffs.length > 0 && !visibleDiffs[visibleDiffs.length - 1].skipped) {
+      // Add a skip marker between distant changed regions
+      visibleDiffs.push({ ...part, value: "", added: undefined, removed: undefined, skipped: true } as any);
+    }
+  }
+
   return (
-    <div className="absolute inset-0 bg-[#0E0E0E] overflow-y-auto px-4 py-2 z-10 font-sans select-text">
-      {paragraphs
-        .filter((para) => para.length > 0)
-        .map((para, pIdx) => {
-          const hasChanges = para.some((part) => part.added || part.removed);
-          return (
-            <div
-              key={pIdx}
-              className={`pl-3 border-l-2 mb-4 leading-relaxed text-slate-200 ${
-                hasChanges
-                  ? "border-transparent hover:border-[#10B981] transition-all duration-200"
-                  : "border-transparent"
-              }`}
-            >
-              {para.map((part, index) => {
-                if (part.added) {
-                  return (
-                    <span
-                      key={index}
-                      className="bg-[#10B9811A] text-[#10B981] select-text"
-                    >
-                      {part.value}
-                    </span>
-                  );
-                }
-                if (part.removed) {
-                  return (
-                    <span
-                      key={index}
-                      className="text-[#EF4444] line-through select-text"
-                    >
-                      {part.value}
-                    </span>
-                  );
-                }
-                return <span key={index} className="select-text">{part.value}</span>;
-              })}
-            </div>
-          );
+    <div className="absolute inset-0 bg-[#0E0E0E]/95 overflow-y-auto px-4 py-3 z-10 font-sans select-text">
+      {/* Summary header */}
+      <div className="sticky top-0 bg-[#131313] border border-[#10B981]/30 px-3 py-2 mb-3 flex items-center gap-3 text-xs z-20">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
+        </span>
+        <span className="text-[#10B981] font-mono font-semibold tracking-wider uppercase">
+          AI SUGGESTION
+        </span>
+        <span className="text-zinc-500 font-technical">
+          <span className="text-[#10B981]">+{addedLines}</span> / <span className="text-[#EF4444]">-{removedLines}</span> lines changed
+        </span>
+      </div>
+
+      {/* Diff content — only changed regions */}
+      <div className="space-y-0 font-mono text-sm leading-relaxed">
+        {visibleDiffs.map((part, index) => {
+          if ((part as any).skipped) {
+            return (
+              <div key={index} className="text-zinc-600 text-center py-1 select-none">
+                ···
+              </div>
+            );
+          }
+
+          const lines = part.value.split("\n");
+          return lines.filter((l) => l.length > 0 || part.added || part.removed).map((line, lineIdx) => {
+            const key = `${index}-${lineIdx}`;
+            if (part.added) {
+              return (
+                <div key={key} className="bg-[#10B981]/10 border-l-2 border-[#10B981] pl-3 pr-2 py-0.5 text-[#10B981]">
+                  + {line}
+                </div>
+              );
+            }
+            if (part.removed) {
+              return (
+                <div key={key} className="bg-[#EF4444]/10 border-l-2 border-[#EF4444] pl-3 pr-2 py-0.5 text-[#EF4444] line-through">
+                  - {line}
+                </div>
+              );
+            }
+            return (
+              <div key={key} className="pl-3 pr-2 py-0.5 text-zinc-500 border-l-2 border-transparent">
+                &nbsp;&nbsp;{line}
+              </div>
+            );
+          });
         })}
+      </div>
     </div>
   );
 };
@@ -340,11 +362,11 @@ export default function LiveEditor({ noteId, content }: LiveEditorProps) {
         />
       )}
 
-      <div className={isPending ? "opacity-0 pointer-events-none" : ""}>
+      <div className={isPending ? "opacity-30 pointer-events-none select-none" : ""}>
         <MilkdownProvider>
           {/* Key-based remounting ensures editor always picks up latest content via defaultValueCtx.
               Cursor position is tracked via DOM events + Zustand store, so it survives remounts. */}
-          <EditorComponent key={isPending ? 'pending' : `active-${noteId}`} content={content} noteId={noteId} />
+          <EditorComponent key={`active-${noteId}`} content={content} noteId={noteId} />
         </MilkdownProvider>
       </div>
     </div>

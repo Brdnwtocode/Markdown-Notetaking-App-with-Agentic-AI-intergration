@@ -1,0 +1,8 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <rect width="32" height="32" rx="4" fill="#10B981"/>
+  <!-- Simplified Icon for legibility -->
+  <g transform="translate(6, 6) scale(0.4)" shape-rendering="geometricPrecision">
+    <path d="M0 15V0H30V10H10V50H0V15Z" fill="#0E0E0E" />
+    <path d="M50 35V50H20V40H40V0H50V35Z" fill="#0E0E0E" />
+  </g>
+</svg>

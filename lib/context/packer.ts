@@ -167,11 +167,35 @@ export class ContextPacker {
   }
 
   /**
-   * Pack from recent activity (placeholder)
+   * Pack from recent activity (last 3 recently-updated notes/stacks)
    */
-  private async packFromRecentActivity(_opts: ContextPackerOptions): Promise<ContextItem[]> {
-    // TODO: Implement recent activity tracking (e.g. recently edited notes, last-viewed stacks)
-    return [];
+  private async packFromRecentActivity(opts: ContextPackerOptions): Promise<ContextItem[]> {
+    const { noteCache, stacks, tasks } = this.store;
+    const items: ContextItem[] = [];
+
+    // Collect entities with timestamps for recency sorting
+    const recent: Array<{ type: string; id: string; title: string; updatedAt: string }> = [];
+
+    for (const note of Object.values(noteCache)) {
+      if (note.updatedAt) recent.push({ type: "NOTE", id: note.id, title: note.title, updatedAt: note.updatedAt });
+    }
+    for (const stack of stacks) {
+      if (stack.updatedAt) recent.push({ type: "STACK", id: stack.id, title: stack.name, updatedAt: stack.updatedAt });
+    }
+    for (const task of tasks.slice(0, 5)) {
+      if ((task as any).updatedAt) recent.push({ type: "TASK", id: task.id, title: task.title, updatedAt: (task as any).updatedAt });
+    }
+
+    // Sort by most recently updated
+    recent.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+    // Take top 3 most recent
+    for (const entity of recent.slice(0, 3)) {
+      const item = await this.buildContextItem(entity.type, entity.id, entity.title, "recent_activity", opts);
+      if (item) items.push(item);
+    }
+
+    return items;
   }
 
   /**

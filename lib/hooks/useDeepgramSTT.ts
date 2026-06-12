@@ -64,6 +64,7 @@ export function useDeepgramSTT({
   const blobsRef = useRef<Blob[]>([]);
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const committedTranscriptRef = useRef<string>("");  // speech_final segments joined
+  const fallbackInProgressRef = useRef(false); // guard against duplicate fallback
 
   // Snapshot of context gathered at start() time — needed by the fallback
   // which may run asynchronously after the start call returns.
@@ -76,6 +77,7 @@ export function useDeepgramSTT({
   // ─── Cleanup ───────────────────────────────────────────────────────────────
 
   const cleanup = useCallback(() => {
+    fallbackInProgressRef.current = false;
     if (fallbackTimerRef.current) {
       clearTimeout(fallbackTimerRef.current);
       fallbackTimerRef.current = null;
@@ -106,9 +108,14 @@ export function useDeepgramSTT({
     contextId: string;
     extras: FormData;
   } | null) => {
+    // Guard against duplicate fallback calls (e.g. WS onclose + onerror firing together)
+    if (fallbackInProgressRef.current) return;
+    fallbackInProgressRef.current = true;
+
     const ctx = fallbackCtx || sessionContextRef.current;
     if (!ctx) {
       console.warn("[useDeepgramSTT] runFallback: no context found");
+      fallbackInProgressRef.current = false;
       return;
     }
 
@@ -174,6 +181,7 @@ export function useDeepgramSTT({
     } finally {
       blobsRef.current = [];
       sessionContextRef.current = null;
+      fallbackInProgressRef.current = false;
       setStatus("idle");
     }
   }, [onTranscriptReady]);
@@ -240,27 +248,23 @@ export function useDeepgramSTT({
         return runFallback(sessionContextRef.current);
       }
 
+      // Track the latest status in a ref so WS handlers don't need setState updater side-effects
+      const statusRef = { current: "streaming" as STTStatus };
+
       socket.onclose = () => {
         // Only fall back if we haven't already entered finalization/fallback
-        setStatus((prev) => {
-          if (prev === "streaming") {
-            const ctxCopy = sessionContextRef.current;
-            // schedule outside this setter
-            setTimeout(() => runFallback(ctxCopy), 0);
-          }
-          return prev;
-        });
+        if (statusRef.current === "streaming" && !fallbackInProgressRef.current) {
+          const ctxCopy = sessionContextRef.current;
+          setTimeout(() => runFallback(ctxCopy), 0);
+        }
       };
 
       socket.onerror = (err) => {
         console.warn("[useDeepgramSTT] WS error:", err);
-        setStatus((prev) => {
-          if (prev === "streaming") {
-            const ctxCopy = sessionContextRef.current;
-            setTimeout(() => runFallback(ctxCopy), 0);
-          }
-          return prev;
-        });
+        if (statusRef.current === "streaming" && !fallbackInProgressRef.current) {
+          const ctxCopy = sessionContextRef.current;
+          setTimeout(() => runFallback(ctxCopy), 0);
+        }
       };
 
       socket.onmessage = (event) => {
