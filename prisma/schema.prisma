@@ -25,6 +25,7 @@ model User {
   folders Folder[]
   tasks   Task[]
   calendarEvents CalendarEvent[]
+  recordings Recording[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -204,6 +205,61 @@ model RefreshToken {
 
   @@index([userId])
   @@index([token])
+}
+
+// ─── Records Feature ────────────────────────────────────────────────────────
+
+enum RecordStatus {
+  RECORDING
+  TRANSCRIBING
+  RESOLVING
+  COMMITTED
+}
+
+model Recording {
+  id            String       @id @default(uuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title         String       @default("Untitled Recording")
+  durationSec   Float        @default(0)
+  transcript    String       @default("") @db.Text
+  status        RecordStatus @default(RECORDING)
+  audioKey      String?      // S3 key for the audio file (e.g. "records/abc123.wav")
+  audioSizeBytes Int?        @map("audio_size_bytes")
+  errorLog      String?      @map("error_log") @db.Text
+
+  // Agentic Automate results (JSON payloads stored after AI processing)
+  noteMutation        Json?   @map("note_mutation")        @db.JsonB
+  taskMutations       Json?   @map("task_mutations")       @db.JsonB
+  stackMutation       Json?   @map("stack_mutation")       @db.JsonB
+  calendarMutation    Json?   @map("calendar_mutation")    @db.JsonB
+  speakerLabels       Json?   @map("speaker_labels")       @db.JsonB
+
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt      @map("updated_at")
+  committedAt   DateTime? @map("committed_at")
+
+  attachments   Attachment[]
+
+  @@map("recordings")
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, status])
+}
+
+model Attachment {
+  id            String     @id @default(uuid())
+  recordingId   String     @map("recording_id")
+  recording     Recording  @relation(fields: [recordingId], references: [id], onDelete: Cascade)
+  userId        String     @map("user_id")
+  fileName      String     @map("file_name")
+  mimeType      String     @map("mime_type")
+  storageKey    String     @map("storage_key")  // S3 key
+  sizeBytes     Int        @map("size_bytes")
+  createdAt     DateTime   @default(now()) @map("created_at")
+
+  @@map("attachments")
+  @@index([recordingId])
+  @@index([userId])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import { StateCreator } from "zustand";
 import { RootStore } from "@/lib/store";
 
-export type TabType = "NOTE" | "STACK" | "TASKS" | "CALENDAR";
+export type TabType = "NOTE" | "STACK" | "TASKS" | "CALENDAR" | "RECORDS";
 
 export interface OpenTab {
   id: string;

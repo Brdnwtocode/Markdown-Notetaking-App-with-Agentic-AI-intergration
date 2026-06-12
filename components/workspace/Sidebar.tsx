@@ -27,7 +27,7 @@ import {
   Plus, LogOut, Database, PanelLeftOpen, PanelLeftClose, 
   FileText, Table2, Search, ArrowUpAZ, ArrowDownAZ, 
   Calendar, Filter, CheckSquare, CalendarDays, MessageSquare,
-  ChevronRight, Folder, FolderPlus, Trash2, Edit, GripVertical, Loader2 
+  ChevronRight, Folder, FolderPlus, Trash2, Edit, GripVertical, Loader2, Mic
 } from "lucide-react";
 import { TASKS_TAB_ID, CALENDAR_TAB_ID } from "@/lib/constants";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
@@ -802,6 +802,18 @@ export default function Sidebar() {
           title="Calendar"
         >
           <CalendarDays className="h-5 w-5 text-[#A1A1AA]" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          onClick={() => {
+            openTab("singleton-records", "RECORDS", "Records");
+            router.push("/workspace/records");
+          }}
+          className="h-10 w-10 rounded-none hover:bg-white/5"
+          title="Records"
+        >
+          <Mic className="h-5 w-5 text-[#A1A1AA]" />
         </Button>
         <Button
           size="icon"

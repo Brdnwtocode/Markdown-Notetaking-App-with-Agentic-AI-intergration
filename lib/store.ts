@@ -8,6 +8,7 @@ import { createAiSlice, AiSlice } from "@/lib/slices/aiSlice";
 import { createTasksSlice, TasksSlice } from "@/lib/slices/tasksSlice";
 import { createCalendarSlice, CalendarSlice } from "@/lib/slices/calendarSlice";
 import { createPendingMutationSlice, PendingMutationSlice } from "@/lib/slices/pendingMutationSlice";
+import { createRecordsSlice, RecordsSlice } from "@/lib/slices/recordsSlice";
 
 export type RootStore =
   & NotesSlice
@@ -18,7 +19,8 @@ export type RootStore =
   & AiSlice
   & TasksSlice
   & CalendarSlice
-  & PendingMutationSlice;
+  & PendingMutationSlice
+  & RecordsSlice;
 
 export const useWorkspaceStore = create<RootStore>()((...a) => ({
   ...createNotesSlice(...a),
@@ -30,6 +32,7 @@ export const useWorkspaceStore = create<RootStore>()((...a) => ({
   ...createTasksSlice(...a),
   ...createCalendarSlice(...a),
   ...createPendingMutationSlice(...a),
+  ...createRecordsSlice(...a),
 }));
 
 // Re-export all types exactly as before
@@ -41,3 +44,4 @@ export type { ChatMessage, MessageStatus, MessageContext } from "@/lib/slices/ai
 export type { Task, TaskStatus, TaskPriority } from "@/lib/slices/tasksSlice";
 export type { CalendarEvent } from "@/lib/slices/calendarSlice";
 export type { MutationStatus, PendingMutationSlice, PendingMutation } from "@/lib/slices/pendingMutationSlice";
+export type { Recording, RecordStatus, RecordsSlice } from "@/lib/slices/recordsSlice";

@@ -10,6 +10,7 @@ function getTabHref(tab: { id: string; type: string; title: string }): string {
     case "STACK": return `/workspace/stacks/${tab.id}`;
     case "TASKS": return `/workspace/tasks`;
     case "CALENDAR": return `/workspace/calendar`;
+    case "RECORDS": return `/workspace/records`;
     default: {
       void (tab.type as never);
       return `/workspace`;
