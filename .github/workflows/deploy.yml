@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   deploy:
     name: Deploy Next.js to EC2
@@ -30,6 +34,7 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL || secrets.DATABASE_URL }}
           NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
           AUTH_SECRET: ${{ secrets.AUTH_SECRET }}
           AUTH_GITHUB_ID: ${{ secrets.AUTH_GITHUB_ID }}
@@ -38,20 +43,41 @@ jobs:
           AUTH_GOOGLE_SECRET: ${{ secrets.AUTH_GOOGLE_SECRET }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FASTAPI_URL: ${{ secrets.FASTAPI_URL }}
+          AUTH_TRUST_HOST: ${{ secrets.AUTH_TRUST_HOST || 'true' }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           passphrase: ${{ secrets.SSH_PASSPHRASE }}
           port: 22
-          envs: DATABASE_URL,NEXTAUTH_URL,AUTH_SECRET,AUTH_GITHUB_ID,AUTH_GITHUB_SECRET,AUTH_GOOGLE_ID,AUTH_GOOGLE_SECRET,OPENAI_API_KEY,FASTAPI_URL
+          envs: DATABASE_URL,DIRECT_URL,NEXTAUTH_URL,AUTH_SECRET,AUTH_GITHUB_ID,AUTH_GITHUB_SECRET,AUTH_GOOGLE_ID,AUTH_GOOGLE_SECRET,OPENAI_API_KEY,FASTAPI_URL,AUTH_TRUST_HOST
           script: |
             set -e
             cd /home/${{ secrets.SSH_USERNAME }}/markdown-app
             
+            # If FASTAPI_URL points to localhost or is empty, rewrite it to host.docker.internal for container networking
+            if [ "$FASTAPI_URL" = "http://localhost:8000" ] || [ "$FASTAPI_URL" = "http://127.0.0.1:8000" ] || [ -z "$FASTAPI_URL" ]; then
+              FASTAPI_URL="http://host.docker.internal:8000"
+            fi
+            
+            # Generate AUTH_URL and AUTH_REDIRECT_PROXY_URL from NEXTAUTH_URL for NextAuth v5 compatibility
+            if [ -n "$NEXTAUTH_URL" ]; then
+              CLEANED_URL="${NEXTAUTH_URL%/}"
+              if [[ "$CLEANED_URL" == */api/auth ]]; then
+                AUTH_URL="$CLEANED_URL"
+              else
+                AUTH_URL="${CLEANED_URL}/api/auth"
+              fi
+              AUTH_REDIRECT_PROXY_URL="$AUTH_URL"
+            else
+              AUTH_URL=""
+              AUTH_REDIRECT_PROXY_URL=""
+            fi
+            
             # Create or update the .env.local file with the environment variables from GitHub Secrets
             cat << EOF > .env.local
             DATABASE_URL="$DATABASE_URL"
+            DIRECT_URL="$DIRECT_URL"
             NEXTAUTH_URL="$NEXTAUTH_URL"
             AUTH_SECRET="$AUTH_SECRET"
             AUTH_GITHUB_ID="$AUTH_GITHUB_ID"
@@ -61,6 +87,9 @@ jobs:
             NEXT_PUBLIC_OPENAI_API_KEY="$OPENAI_API_KEY"
             OPENAI_API_KEY="$OPENAI_API_KEY"
             FASTAPI_URL="$FASTAPI_URL"
+            AUTH_TRUST_HOST="$AUTH_TRUST_HOST"
+            AUTH_URL="$AUTH_URL"
+            AUTH_REDIRECT_PROXY_URL="$AUTH_REDIRECT_PROXY_URL"
             EOF
             
             # Check if docker is installed

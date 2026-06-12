@@ -1,13 +1,19 @@
 # Stage 1: Build the app
-FROM node:18-alpine AS builder
+FROM node:18-slim AS builder
 WORKDIR /app
 
-# Install dependencies needed for node-gyp or alpine
-RUN apk add --no-cache libc6-compat
+# Install openssl and other required system libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
+
+# Set build-time dummy variables for Prisma schema validation
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+ENV DIRECT_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 
 # Install dependencies (including devDependencies for build)
 RUN npm ci
@@ -24,12 +30,18 @@ ENV NEXT_TELEMETRY_DISABLED 1
 # Build the Next.js application
 RUN npm run build
 
+
 # Stage 2: Run the app
-FROM node:18-alpine AS runner
+FROM node:18-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
+
+# Install openssl in runner stage so Prisma engine can run at startup
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy package files and prisma schema
 COPY --from=builder /app/package*.json ./
