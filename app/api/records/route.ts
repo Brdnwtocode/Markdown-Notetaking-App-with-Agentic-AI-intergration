@@ -28,6 +28,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Verify the user still exists in DB (session may outlive the user row
+  // after a DB reset or migration issue).
+  const userExists = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { id: true },
+  });
+  if (!userExists) {
+    return NextResponse.json(
+      { error: "Session expired — user no longer exists. Please sign out and re-register." },
+      { status: 401 },
+    );
+  }
+
   const body = await request.json();
   const { title, transcript, durationSec, audioKey, audioSizeBytes } = body;
 

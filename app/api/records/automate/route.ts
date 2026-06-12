@@ -1,11 +1,9 @@
 // app/api/records/automate/route.ts
 //
-// POST → Agentic Automate: send transcript + workspace context to FastAPI
-//        and receive structured mutations (notes, tasks, stacks, calendar).
-//
-// This is the "brain" of the Records feature — it bundles the transcription
-// content with current workspace context and routes it through the NLU
-// resolver to produce cross-module mutations.
+// POST → Agentic Automate BFF Proxy
+// Accepts multipart/form-data with audio blob + metadata from the client,
+// forwards everything to the stateless FastAPI microservice.
+// FastAPI has no DB access — it only processes and returns mutations.
 
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
@@ -20,64 +18,67 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { transcript, recordingId, workspaceContext } = body;
+    const formData = await request.formData();
 
-    if (!transcript || typeof transcript !== "string") {
+    const audioFile = formData.get("audio") as File | null;
+    const transcript = (formData.get("transcript") as string) || "";
+    const recordingId = (formData.get("recordingId") as string) || "";
+    const action = (formData.get("action") as string) || "full_automate";
+    const workspaceContextStr = (formData.get("workspaceContext") as string) || "{}";
+
+    if (!transcript.trim() && !audioFile) {
       return NextResponse.json(
-        { error: "Transcript is required" },
+        { error: "Transcript or audio is required" },
         { status: 400 },
       );
     }
 
-    if (!recordingId) {
-      return NextResponse.json(
-        { error: "recordingId is required" },
-        { status: 400 },
-      );
+    // Verify recording ownership if an ID was provided (may be empty for unsaved)
+    if (recordingId) {
+      const recording = await prisma.recording.findUnique({
+        where: { id: recordingId },
+      });
+      if (!recording || recording.userId !== session.user.id) {
+        return NextResponse.json(
+          { error: "Recording not found" },
+          { status: 404 },
+        );
+      }
+
+      // Mark as resolving
+      await prisma.recording.update({
+        where: { id: recordingId },
+        data: { status: "RESOLVING" },
+      });
     }
 
-    // Verify recording belongs to user
-    const recording = await prisma.recording.findUnique({
-      where: { id: recordingId },
-    });
+    // Build multipart payload for FastAPI
+    const fastApiFormData = new FormData();
+    fastApiFormData.append("transcript", transcript);
+    fastApiFormData.append("recording_id", recordingId);
+    fastApiFormData.append("user_id", session.user.id);
+    fastApiFormData.append("mode", "automate");
+    fastApiFormData.append("action", action);
+    fastApiFormData.append("workspace_context", workspaceContextStr);
 
-    if (!recording || recording.userId !== session.user.id) {
-      return NextResponse.json(
-        { error: "Recording not found" },
-        { status: 404 },
-      );
+    if (audioFile && audioFile.size > 0) {
+      fastApiFormData.append("audio", audioFile);
     }
 
-    // Update status to RESOLVING
-    await prisma.recording.update({
-      where: { id: recordingId },
-      data: { status: "RESOLVING" },
-    });
-
-    // Forward to FastAPI microservice
     const fastApiUrl = process.env.FASTAPI_URL || "http://0.0.0.0:8000";
 
-    const payload = {
-      transcript,
-      recording_id: recordingId,
-      user_id: session.user.id,
-      workspace_context: workspaceContext || {},
-      mode: "automate", // signals FastAPI this is from Records, not voice
-    };
-
     console.log(`[Records Automate] POST ${fastApiUrl}/api/v1/records/automate`);
+    console.log(`[Records Automate] Audio: ${!!audioFile}, Size: ${audioFile?.size || 0}`);
 
     const fastApiResponse = await fetch(
       `${fastApiUrl}/api/v1/records/automate`,
       {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           "x-session-id": request.headers.get("x-session-id") || "",
           "x-user-id": session.user.id,
         },
-        body: JSON.stringify(payload),
+        body: fastApiFormData,
       },
     );
 
@@ -85,11 +86,13 @@ export async function POST(request: NextRequest) {
       const errorText = await fastApiResponse.text();
       console.error("[Records Automate] FastAPI error:", fastApiResponse.status, errorText);
 
-      // Revert status
-      await prisma.recording.update({
-        where: { id: recordingId },
-        data: { status: "COMMITTED" },
-      });
+      // Revert status if we had a recording
+      if (recordingId) {
+        await prisma.recording.update({
+          where: { id: recordingId },
+          data: { status: "COMMITTED" },
+        }).catch(() => {});
+      }
 
       return NextResponse.json(
         { error: "Agentic Automate processing failed" },
@@ -99,20 +102,24 @@ export async function POST(request: NextRequest) {
 
     const result = await fastApiResponse.json();
 
-    // Store mutations on the recording for later reference
-    await prisma.recording.update({
-      where: { id: recordingId },
-      data: {
-        status: "COMMITTED",
-        noteMutation: result.note_mutation || result.noteMutation || null,
-        taskMutations: result.task_mutations || result.taskMutations || null,
-        stackMutation: result.stack_mutation || result.stackMutation || null,
-        calendarMutation: result.calendar_mutation || result.calendarMutation || null,
-        speakerLabels: result.speaker_labels || result.speakerLabels || null,
-      },
-    });
+    // Store mutations on the Recording row (audit trail)
+    if (recordingId) {
+      await prisma.recording.update({
+        where: { id: recordingId },
+        data: {
+          status: "COMMITTED",
+          noteMutation: result.note_mutation || result.noteMutation || null,
+          taskMutations: result.task_mutations || result.taskMutations || null,
+          stackMutation: result.stack_mutation || result.stackMutation || null,
+          calendarMutation: result.calendar_mutation || result.calendarMutation || null,
+          speakerLabels: result.speaker_labels || result.speakerLabels || null,
+        },
+      }).catch((err) => {
+        console.error("[Records Automate] Failed to store mutations:", err);
+      });
+    }
 
-    // Normalize response keys to camelCase for the frontend
+    // Normalize to camelCase for the frontend
     const normalized = {
       noteMutation: result.note_mutation || result.noteMutation || null,
       taskMutations: result.task_mutations || result.taskMutations || [],
@@ -122,8 +129,7 @@ export async function POST(request: NextRequest) {
       summary: result.summary || null,
     };
 
-    console.log("[Records Automate] Success:", JSON.stringify(normalized, null, 2));
-
+    console.log("[Records Automate] Success");
     return NextResponse.json(normalized);
   } catch (error) {
     console.error("[Records Automate] Error:", error);

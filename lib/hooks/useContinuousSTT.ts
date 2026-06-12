@@ -1,22 +1,20 @@
+"use client";
+
 // lib/hooks/useContinuousSTT.ts
 //
-// Continuous (long-form) Speech-to-Text hook optimized for the Records
-// audio workstation. Unlike useDeepgramSTT (push-to-talk), this hook:
+// Continuous (long-form) Speech-to-Text hook for the Records workstation.
+// Streams raw PCM Int16 audio to Deepgram WebSocket using linear16 encoding.
 //
-//   - Streams indefinitely until manually stopped
-//   - Supports pause/resume of transcription
-//   - Emits interim transcripts at regular intervals
-//   - Accumulates final transcripts into a complete transcript
-//   - Handles reconnection on network drop
-//
-// Happy path:   Deepgram WebSocket (nova-3) with interim results.
-// Fallback:     /api/voice/process → FastAPI batch pipeline.
+// Key design decisions:
+//   - encoding=linear16 (raw PCM) — simpler than Opus, no container overhead
+//   - ScriptProcessorNode for real-time PCM capture (works in all browsers)
+//   - statusRef avoids stale closures in audio processing callbacks
+//   - MediaRecorder runs in parallel as fallback (stores blobs for batch upload)
 //
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import toast from "react-hot-toast";
-import { getSessionId } from "@/lib/session";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -31,20 +29,14 @@ export type ContinuousSTTStatus =
   | "error";
 
 export interface ContinuousSTTOptions {
-  /** Called with every interim transcript chunk (live display) */
   onInterimTranscript?: (text: string) => void;
-  /** Called when a finalized segment is committed (accumulate into full transcript) */
   onFinalizedSegment?: (text: string) => void;
-  /** Called with the complete accumulated transcript when recording stops */
   onTranscriptComplete?: (fullTranscript: string) => void;
-  /** Called on status changes */
   onStatusChange?: (status: ContinuousSTTStatus) => void;
-  /** BCP-47 language tag. Defaults to "vi" (Vietnamese). */
+  /** BCP-47 language tag. Defaults to "en" (English). */
   language?: string;
   /** Deepgram model. Defaults to "nova-3". */
   model?: string;
-  /** Reconnect on unexpected disconnect */
-  autoReconnect?: boolean;
 }
 
 // ─── Hook ───────────────────────────────────────────────────────────────────
@@ -54,25 +46,28 @@ export function useContinuousSTT({
   onFinalizedSegment,
   onTranscriptComplete,
   onStatusChange,
-  language = "vi",
+  language = "en",
   model = "nova-3",
-  autoReconnect = true,
 }: ContinuousSTTOptions = {}) {
   const [status, setStatus] = useState<ContinuousSTTStatus>("idle");
 
-  // Refs to avoid stale closures in WebSocket callbacks
-  const dgConnectionRef = useRef<any>(null);
+  // Refs — all mutable runtime state lives here to avoid stale closures
+  const statusRef = useRef<ContinuousSTTStatus>("idle");
+  const wsRef = useRef<WebSocket | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const blobsRef = useRef<Blob[]>([]);
-  const reconnectAttemptsRef = useRef(0);
-  const maxReconnectAttempts = 3;
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const fullTranscriptRef = useRef("");
-  const interimChunksRef = useRef<Set<string>>(new Set());
+  const interimKeysRef = useRef<Set<string>>(new Set());
   const stoppedIntentionallyRef = useRef(false);
+  const pausedRef = useRef(false);
 
-  const setStatusAndNotify = useCallback(
+  // Keep both state and ref in sync
+  const setStatusBoth = useCallback(
     (s: ContinuousSTTStatus) => {
+      statusRef.current = s;
       setStatus(s);
       onStatusChange?.(s);
     },
@@ -82,15 +77,24 @@ export function useContinuousSTT({
   // ─── Cleanup ───────────────────────────────────────────────────────────────
 
   const cleanup = useCallback(() => {
-    try { dgConnectionRef.current?.close(); } catch { /* ignore */ }
-    dgConnectionRef.current = null;
+    // Disconnect audio processing
+    try { processorRef.current?.disconnect(); } catch { /* ignore */ }
+    processorRef.current = null;
+    try { audioCtxRef.current?.close(); } catch { /* ignore */ }
+    audioCtxRef.current = null;
 
+    // Close WebSocket
+    try { wsRef.current?.close(); } catch { /* ignore */ }
+    wsRef.current = null;
+
+    // Stop MediaRecorder
     try {
       if (mediaRecorderRef.current?.state !== "inactive") {
         mediaRecorderRef.current?.stop();
       }
     } catch { /* ignore */ }
 
+    // Stop mic tracks
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
     mediaStreamRef.current = null;
   }, []);
@@ -99,20 +103,20 @@ export function useContinuousSTT({
 
   const start = useCallback(async () => {
     stoppedIntentionallyRef.current = false;
-    reconnectAttemptsRef.current = 0;
+    pausedRef.current = false;
     fullTranscriptRef.current = "";
-    interimChunksRef.current = new Set();
+    interimKeysRef.current = new Set();
 
     try {
-      setStatusAndNotify("minting");
+      setStatusBoth("minting");
 
-      // Get Deepgram ephemeral token from our server
+      // 1. Get Deepgram ephemeral key from our server (never exposed to browser)
       const tokenRes = await fetch("/api/deepgram/token");
       if (!tokenRes.ok) throw new Error("Failed to get Deepgram token");
       const { token } = await tokenRes.json();
 
-      // Acquire mic
-      setStatusAndNotify("connecting");
+      // 2. Acquire mic
+      setStatusBoth("connecting");
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           sampleRate: 16000,
@@ -123,7 +127,7 @@ export function useContinuousSTT({
       });
       mediaStreamRef.current = stream;
 
-      // Start MediaRecorder for fallback blobs
+      // 3. Start MediaRecorder (fallback — stores blobs for later upload)
       const recorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
           ? "audio/webm;codecs=opus"
@@ -134,169 +138,157 @@ export function useContinuousSTT({
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) blobsRef.current.push(e.data);
       };
-      recorder.start(1000); // 1s chunks
+      recorder.start(1000);
 
-      // Open Deepgram WebSocket
-      const ws = new WebSocket(
-        `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&interim_results=true&utterance_end_ms=1500&encoding=opus&sample_rate=16000&channels=1`,
-        ["token", token],
-      );
-      dgConnectionRef.current = ws;
+      // 4. Open Deepgram WebSocket
+      //    encoding=linear16 matches the raw PCM Int16 we send via ScriptProcessor
+      const url = `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&interim_results=true&encoding=linear16&sample_rate=16000&channels=1`;
+      console.log("[ContinuousSTT] Connecting:", url);
+
+      const ws = new WebSocket(url, ["token", token]);
+      wsRef.current = ws;
 
       ws.onopen = () => {
-        setStatusAndNotify("streaming");
-        reconnectAttemptsRef.current = 0;
+        console.log("[ContinuousSTT] WebSocket opened, starting audio pipe");
+        setStatusBoth("streaming");
 
-        // Pipe mic audio into WebSocket via MediaRecorder or AudioContext
+        // Create AudioContext + ScriptProcessor to pipe mic → WebSocket
         const audioCtx = new AudioContext({ sampleRate: 16000 });
+        audioCtxRef.current = audioCtx;
         const source = audioCtx.createMediaStreamSource(stream);
         const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+        processorRef.current = processor;
 
         source.connect(processor);
         processor.connect(audioCtx.destination);
 
         processor.onaudioprocess = (e) => {
-          if (ws.readyState === WebSocket.OPEN && status !== "paused") {
+          // Use refs — never stale
+          if (
+            wsRef.current?.readyState === WebSocket.OPEN &&
+            !pausedRef.current
+          ) {
             const inputData = e.inputBuffer.getChannelData(0);
-            // Convert Float32 to Int16 PCM
+            // Float32 [-1.0, 1.0] → Int16 [-32768, 32767]
             const pcm = new Int16Array(inputData.length);
             for (let i = 0; i < inputData.length; i++) {
-              pcm[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+              const s = Math.max(-1, Math.min(1, inputData[i]));
+              pcm[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
             }
-            ws.send(pcm.buffer);
+            try {
+              wsRef.current.send(pcm.buffer);
+            } catch {
+              // WebSocket might have closed
+            }
           }
         };
-
-        // Store for cleanup
-        (ws as any).__audioCtx = audioCtx;
-        (ws as any).__processor = processor;
       };
 
       ws.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data);
-          const transcript = data.channel?.alternatives?.[0]?.transcript || "";
+          const data = JSON.parse(event.data as string);
+          const transcript =
+            data.channel?.alternatives?.[0]?.transcript || "";
 
           if (!transcript) return;
 
           if (data.is_final) {
-            // Deduplicate finalized segments
             const key = transcript.slice(0, 40);
-            if (!interimChunksRef.current.has(key)) {
-              interimChunksRef.current.add(key);
+            if (!interimKeysRef.current.has(key)) {
+              interimKeysRef.current.add(key);
               fullTranscriptRef.current += " " + transcript;
               fullTranscriptRef.current = fullTranscriptRef.current.trim();
+              console.log("[ContinuousSTT] Final:", transcript.slice(0, 60));
               onFinalizedSegment?.(transcript);
             }
           } else {
             onInterimTranscript?.(transcript);
           }
-        } catch { /* ignore parse errors */ }
-      };
-
-      ws.onerror = () => {
-        if (!stoppedIntentionallyRef.current && status !== "finalizing") {
-          setStatusAndNotify("error");
-          if (autoReconnect && reconnectAttemptsRef.current < maxReconnectAttempts) {
-            reconnectAttemptsRef.current++;
-            cleanup();
-            setTimeout(() => start(), 2000);
-          }
+        } catch {
+          // Ignore non-JSON messages (e.g., binary metadata)
         }
       };
 
-      ws.onclose = () => {
-        if (!stoppedIntentionallyRef.current && status === "streaming") {
-          setStatusAndNotify("error");
+      ws.onerror = (err) => {
+        console.error("[ContinuousSTT] WebSocket error:", err);
+        if (!stoppedIntentionallyRef.current) {
+          setStatusBoth("error");
+          toast.error("Transcription connection lost");
+        }
+      };
+
+      ws.onclose = (ev) => {
+        console.log("[ContinuousSTT] WebSocket closed:", ev.code, ev.reason);
+        if (!stoppedIntentionallyRef.current) {
+          setStatusBoth("error");
         }
       };
     } catch (err: any) {
       console.error("[ContinuousSTT] Start failed:", err);
-      setStatusAndNotify("error");
-      toast.error("Failed to start recording: " + (err.message || "Unknown error"));
+      setStatusBoth("error");
+      toast.error("Microphone access denied or connection failed");
     }
-  }, [
-    status,
-    language,
-    model,
-    autoReconnect,
-    setStatusAndNotify,
-    cleanup,
-    onInterimTranscript,
-    onFinalizedSegment,
-  ]);
+  }, [setStatusBoth, language, model, onInterimTranscript, onFinalizedSegment]);
 
   // ─── Pause / Resume ────────────────────────────────────────────────────────
 
   const pause = useCallback(() => {
-    setStatusAndNotify("paused");
-  }, [setStatusAndNotify]);
+    pausedRef.current = true;
+    setStatusBoth("paused");
+  }, [setStatusBoth]);
 
   const resume = useCallback(() => {
-    if (dgConnectionRef.current?.readyState === WebSocket.OPEN) {
-      setStatusAndNotify("streaming");
-    }
-  }, [setStatusAndNotify]);
+    pausedRef.current = false;
+    setStatusBoth("streaming");
+  }, [setStatusBoth]);
 
-  // ─── Stop ──────────────────────────────────────────────────────────────────
+  // ─── Stop ───────────────────────────────────────────────────────────────────
 
-  const stop = useCallback(async (): Promise<{ transcript: string; audioBlob: Blob | null }> => {
+  const stop = useCallback(async (): Promise<{
+    transcript: string;
+    audioBlob: Blob | null;
+  }> => {
     stoppedIntentionallyRef.current = true;
-    setStatusAndNotify("finalizing");
+    setStatusBoth("finalizing");
 
-    // Close WebSocket
-    try { dgConnectionRef.current?.close(); } catch { /* ignore */ }
-    dgConnectionRef.current = null;
+    // Close WebSocket (triggers final speech_final from Deepgram if any)
+    try {
+      // Send a close message to Deepgram to flush final results
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: "CloseStream" }));
+      }
+    } catch { /* ignore */ }
+    // Give Deepgram a moment to send final results
+    await new Promise((r) => setTimeout(r, 500));
+    try {
+      wsRef.current?.close();
+    } catch { /* ignore */ }
+    wsRef.current = null;
 
-    // Clean up audio context
-    const ws = dgConnectionRef.current;
-    try { (ws as any)?.__processor?.disconnect(); } catch { /* ignore */ }
-    try { (ws as any)?.__audioCtx?.close(); } catch { /* ignore */ }
-
-    // Stop MediaRecorder and collect blobs
-    let audioBlob: Blob | null = null;
+    // Stop MediaRecorder
     if (mediaRecorderRef.current?.state !== "inactive") {
       mediaRecorderRef.current?.stop();
-      // Wait a tick for final dataavailable
       await new Promise((r) => setTimeout(r, 200));
     }
-    if (blobsRef.current.length > 0) {
-      audioBlob = new Blob(blobsRef.current, { type: "audio/webm" });
-    }
+
+    const audioBlob =
+      blobsRef.current.length > 0
+        ? new Blob(blobsRef.current, { type: "audio/webm" })
+        : null;
 
     const transcript = fullTranscriptRef.current.trim();
 
-    // Fallback to FastAPI if no transcript from Deepgram
-    if (!transcript && audioBlob) {
-      setStatusAndNotify("fallback");
-      try {
-        const formData = new FormData();
-        formData.append("audio", audioBlob, "recording.webm");
-        formData.append("transcript", "");
-
-        const res = await fetch("/api/voice/process", {
-          method: "POST",
-          body: formData,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          fullTranscriptRef.current = data.aiReply || "";
-        }
-      } catch (err) {
-        console.error("[ContinuousSTT] Fallback failed:", err);
-      }
-    }
-
+    // Clean up audio processing
     cleanup();
+
     mediaRecorderRef.current = null;
     blobsRef.current = [];
 
-    const finalTranscript = fullTranscriptRef.current;
-    onTranscriptComplete?.(finalTranscript);
-    setStatusAndNotify("idle");
+    onTranscriptComplete?.(transcript);
+    setStatusBoth("idle");
 
-    return { transcript: finalTranscript, audioBlob };
-  }, [setStatusAndNotify, cleanup, onTranscriptComplete]);
+    return { transcript, audioBlob };
+  }, [setStatusBoth, cleanup, onTranscriptComplete]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -312,9 +304,7 @@ export function useContinuousSTT({
     stop,
     pause,
     resume,
-    /** Get current full transcript without stopping */
     getTranscript: () => fullTranscriptRef.current,
-    /** Get accumulated audio blobs without stopping */
     getAudioBlob: () =>
       blobsRef.current.length > 0
         ? new Blob(blobsRef.current, { type: "audio/webm" })

@@ -14,4 +14,7 @@ export {
   type MutationStatus,
   type PendingMutationSlice,
   type PendingMutation,
+  type Recording,
+  type RecordStatus,
+  type LocalRecording,
 } from "../lib/store";

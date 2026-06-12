@@ -6,6 +6,7 @@ import PushToTalk from "@/components/shared/PushToTalk";
 import ChatSidebar from "@/components/workspace/ChatSidebar";
 import WorkspaceUserSync from "@/components/workspace/WorkspaceUserSync";
 import UniversalConfirmationToast from "@/components/workspace/UniversalConfirmationToast";
+import BackgroundRecorder from "@/components/workspace/BackgroundRecorder";
 
 export default async function WorkspaceLayout({
   children,
@@ -21,6 +22,7 @@ export default async function WorkspaceLayout({
   return (
     <div className="flex h-screen bg-[#0e0e0e] text-foreground font-sans">
       <WorkspaceUserSync userId={session.user.id} />
+      <BackgroundRecorder />
       <Sidebar />
       <div className="flex-1 flex min-h-0 flex-col overflow-hidden">
         <TabBar />

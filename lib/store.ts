@@ -44,4 +44,4 @@ export type { ChatMessage, MessageStatus, MessageContext } from "@/lib/slices/ai
 export type { Task, TaskStatus, TaskPriority } from "@/lib/slices/tasksSlice";
 export type { CalendarEvent } from "@/lib/slices/calendarSlice";
 export type { MutationStatus, PendingMutationSlice, PendingMutation } from "@/lib/slices/pendingMutationSlice";
-export type { Recording, RecordStatus, RecordsSlice } from "@/lib/slices/recordsSlice";
+export type { Recording, RecordStatus, RecordsSlice, LocalRecording } from "@/lib/slices/recordsSlice";

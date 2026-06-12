@@ -32,6 +32,8 @@ interface AgenticAutomatePanelProps {
   recordingId: string;
   transcript: string;
   hasRecording: boolean;
+  /** Audio blob to forward to FastAPI for processing (diarization, own STT, etc.) */
+  audioBlob?: Blob | null;
 }
 
 type ActionName =
@@ -46,6 +48,7 @@ export default function AgenticAutomatePanel({
   recordingId,
   transcript,
   hasRecording,
+  audioBlob,
 }: AgenticAutomatePanelProps) {
   const {
     automateLoading,
@@ -60,8 +63,8 @@ export default function AgenticAutomatePanel({
   // ─── Call Agentic Automate API ──────────────────────────────────────────
   const runAutomate = useCallback(
     async (action: ActionName) => {
-      if (!transcript.trim()) {
-        toast.error("No transcript to process");
+      if (!transcript.trim() && !audioBlob) {
+        toast.error("No transcript or audio to process");
         return;
       }
 
@@ -69,18 +72,25 @@ export default function AgenticAutomatePanel({
       setAutomateLoading(true);
 
       try {
+        // Send as FormData so the audio blob reaches FastAPI directly
+        const formData = new FormData();
+        formData.append("transcript", transcript);
+        formData.append("recordingId", recordingId);
+        formData.append("action", action);
+        formData.append(
+          "workspaceContext",
+          JSON.stringify({
+            activeNoteId: useWorkspaceStore.getState().currentNoteId,
+            activeStackId: useWorkspaceStore.getState().currentStackId,
+          }),
+        );
+        if (audioBlob && audioBlob.size > 0) {
+          formData.append("audio", audioBlob, "recording.webm");
+        }
+
         const res = await fetch("/api/records/automate", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            transcript,
-            recordingId,
-            workspaceContext: {
-              activeNoteId: useWorkspaceStore.getState().currentNoteId,
-              activeStackId: useWorkspaceStore.getState().currentStackId,
-            },
-            action, // hint to FastAPI which action to prioritize
-          }),
+          body: formData,
         });
 
         if (!res.ok) {
@@ -150,10 +160,10 @@ export default function AgenticAutomatePanel({
         setAutomateLoading(false);
       }
     },
-    [transcript, recordingId, setAutomateLoading, setAutomateResult, stageMutation],
+    [transcript, recordingId, audioBlob, setAutomateLoading, setAutomateResult, stageMutation],
   );
 
-  const isDisabled = !hasRecording || !transcript.trim();
+  const isDisabled = !hasRecording || (!transcript.trim() && !audioBlob);
 
   const actions: {
     id: ActionName;

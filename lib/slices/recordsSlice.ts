@@ -32,6 +32,19 @@ export interface Recording {
   attachments: Attachment[];
 }
 
+/** A recording that exists only in local state — not yet persisted to DB/S3. */
+export interface LocalRecording {
+  id: string;               // temp client-side UUID
+  title: string;
+  durationSec: number;
+  transcript: string;
+  createdAt: string;        // local timestamp
+  source: "recorded" | "imported";  // how it was created
+  fileName?: string;        // original filename (for imports)
+  fileSizeBytes?: number;   // original file size (for imports)
+  mimeType?: string;        // e.g. "audio/webm"
+}
+
 export interface Attachment {
   id: string;
   recordingId: string;
@@ -117,6 +130,12 @@ export interface RecordsSlice {
   recordingsLoading: boolean;
   activeRecordingId: string | null;
 
+  // Local (unsaved) recordings
+  localRecordings: LocalRecording[];
+  addLocalRecording: (rec: LocalRecording) => void;
+  removeLocalRecording: (id: string) => void;
+  clearLocalRecordings: () => void;
+
   // Agentic Automate state
   automateLoading: boolean;
   automateResult: AutomateResponse | null;
@@ -171,6 +190,7 @@ export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> =
   recordings: [],
   recordingsLoading: false,
   activeRecordingId: null,
+  localRecordings: [],
 
   // Agentic Automate state
   automateLoading: false,
@@ -245,4 +265,17 @@ export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> =
   // ─── Agentic Automate ─────────────────────────────────────────────────
   setAutomateLoading: (v) => set({ automateLoading: v }),
   setAutomateResult: (result) => set({ automateResult: result }),
+
+  // ─── Local (unsaved) recordings ─────────────────────────────────────────
+  addLocalRecording: (rec) =>
+    set((s) => ({
+      localRecordings: [rec, ...s.localRecordings],
+      activeRecordingId: rec.id,
+    })),
+  removeLocalRecording: (id) =>
+    set((s) => ({
+      localRecordings: s.localRecordings.filter((r) => r.id !== id),
+      activeRecordingId: s.activeRecordingId === id ? null : s.activeRecordingId,
+    })),
+  clearLocalRecordings: () => set({ localRecordings: [] }),
 });
