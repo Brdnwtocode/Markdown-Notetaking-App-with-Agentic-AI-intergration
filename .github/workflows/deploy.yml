@@ -60,6 +60,20 @@ jobs:
               FASTAPI_URL="http://host.docker.internal:8000"
             fi
             
+            # Generate AUTH_URL and AUTH_REDIRECT_PROXY_URL from NEXTAUTH_URL for NextAuth v5 compatibility
+            if [ -n "$NEXTAUTH_URL" ]; then
+              CLEANED_URL="${NEXTAUTH_URL%/}"
+              if [[ "$CLEANED_URL" == */api/auth ]]; then
+                AUTH_URL="$CLEANED_URL"
+              else
+                AUTH_URL="${CLEANED_URL}/api/auth"
+              fi
+              AUTH_REDIRECT_PROXY_URL="$AUTH_URL"
+            else
+              AUTH_URL=""
+              AUTH_REDIRECT_PROXY_URL=""
+            fi
+            
             # Create or update the .env.local file with the environment variables from GitHub Secrets
             cat << EOF > .env.local
             DATABASE_URL="$DATABASE_URL"
@@ -74,6 +88,8 @@ jobs:
             OPENAI_API_KEY="$OPENAI_API_KEY"
             FASTAPI_URL="$FASTAPI_URL"
             AUTH_TRUST_HOST="$AUTH_TRUST_HOST"
+            AUTH_URL="$AUTH_URL"
+            AUTH_REDIRECT_PROXY_URL="$AUTH_REDIRECT_PROXY_URL"
             EOF
             
             # Check if docker is installed
