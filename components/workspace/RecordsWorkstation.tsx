@@ -12,10 +12,11 @@
 //   3. Click Save    → POST /api/records + upload blob to S3
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { useWorkspaceStore } from "@/lib/store";
 import WaveformVisualizer from "./WaveformVisualizer";
 import AgenticAutomatePanel from "./AgenticAutomatePanel";
-import CaptureQueue, { getBlob, storeBlob, removeBlob } from "./CaptureQueue";
+import CaptureQueue, { getBlob, removeBlob } from "./CaptureQueue";
 import type { Recording, LocalRecording } from "@/lib/slices/recordsSlice";
 import {
   Play, Pause, Square, Mic, SkipBack, SkipForward,
@@ -26,10 +27,10 @@ import toast from "react-hot-toast";
 export default function RecordsWorkstation() {
   const store = useWorkspaceStore();
   const {
-    isRecording, isPaused, recordingTitle, recordingDurationSec, liveTranscript,
+    isRecording, isPaused, sttEnabled, recordingDurationSec, liveTranscript,
     isPlaying, playbackSpeed, playbackVolume, currentPlaybackTime,
-    recordings, recordingsLoading, activeRecordingId,
-    setIsRecording, setIsPaused, setRecordingTitle, setRecordingDurationSec,
+    activeRecordingId,
+    setIsRecording, setIsPaused, setSttEnabled, setRecordingDurationSec,
     setLiveTranscript, resetRecordingState,
     setIsPlaying, setPlaybackSpeed, setPlaybackVolume, setCurrentPlaybackTime,
     setRecordings, setRecordingsLoading, setActiveRecordingId,
@@ -217,11 +218,13 @@ export default function RecordsWorkstation() {
   const durationStr = fmtDuration(recordingDurationSec);
 
   return (
-    <div className="flex h-full bg-[#0E0E0E] text-white font-sans overflow-hidden">
+    <div className="h-full bg-[#0E0E0E] text-white font-sans overflow-hidden">
       <audio ref={audioRef} src={audioUrl || undefined} />
 
-      {/* ═══════════ MAIN PANEL ═══════════ */}
-      <div className="flex-1 flex flex-col min-w-0 border-r border-[#27272A]">
+      <PanelGroup direction="horizontal" autoSaveId="records-layout">
+        {/* ═══════════ MAIN PANEL ═══════════ */}
+        <Panel defaultSize={55} minSize={35}>
+          <div className="flex flex-col h-full min-w-0">
         {/* Sentinel status */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-[#27272A] bg-[#131313]">
           <div className="flex items-center gap-3">
@@ -257,6 +260,19 @@ export default function RecordsWorkstation() {
                 className="flex items-center gap-2 px-4 py-2 bg-[#10B981] text-[#0E0E0E] rounded-sm text-xs font-semibold font-mono uppercase tracking-wider hover:bg-[#10B981]/90 transition-colors">
                 <Mic className="h-3.5 w-3.5" />Record
               </button>
+              {/* STT Toggle — locked once recording starts */}
+              <label className={`flex items-center gap-2 px-3 py-2 border rounded-sm text-xs font-mono cursor-pointer transition-colors ${sttEnabled ? "border-[#10B981]/40 text-[#10B981] bg-[#10B981]/5" : "border-[#27272A] text-zinc-500 hover:border-zinc-600"}`}>
+                <input
+                  type="checkbox"
+                  checked={sttEnabled}
+                  onChange={(e) => setSttEnabled(e.target.checked)}
+                  className="sr-only"
+                />
+                <span className={`relative inline-flex h-4 w-8 shrink-0 rounded-full border transition-colors ${sttEnabled ? "border-[#10B981] bg-[#10B981]/20" : "border-[#27272A] bg-[#27272A]/50"}`}>
+                  <span className={`inline-block h-3 w-3 rounded-full transition-transform mt-[1px] ml-[1px] ${sttEnabled ? "translate-x-4 bg-[#10B981]" : "translate-x-0 bg-zinc-500"}`} />
+                </span>
+                <span className="select-none">STT</span>
+              </label>
               {hasUnsavedRecording && (
                 <button onClick={handleSave} disabled={isSaving}
                   className="flex items-center gap-2 px-4 py-2 border border-amber-500/50 text-amber-400 rounded-sm text-xs font-semibold font-mono uppercase tracking-wider hover:bg-amber-500/10 transition-colors disabled:opacity-50">
@@ -275,6 +291,10 @@ export default function RecordsWorkstation() {
                 className="flex items-center gap-2 px-3 py-2 border border-red-500/50 rounded-sm text-xs font-semibold font-mono uppercase tracking-wider text-red-400 hover:bg-red-500/10 transition-colors">
                 <Square className="h-3.5 w-3.5" />Stop
               </button>
+              {/* STT locked indicator */}
+              <span className={`px-2 py-1 border rounded-sm text-[10px] font-mono ${sttEnabled ? "border-[#10B981]/30 text-[#10B981]/60" : "border-[#27272A] text-zinc-600"}`}>
+                STT {sttEnabled ? "ON" : "OFF"}
+              </span>
             </>
           )}
 
@@ -318,7 +338,7 @@ export default function RecordsWorkstation() {
         <div className="flex-1 overflow-hidden flex flex-col">
           <div className="px-4 py-2 border-b border-[#27272A] flex items-center gap-2">
             <span className="text-[10px] font-mono font-semibold tracking-widest text-zinc-500 uppercase">
-              {isRecording ? "LIVE TRANSCRIPTION" : "TRANSCRIPT"}
+              {isRecording && !sttEnabled ? "RECORDING (STT OFF)" : isRecording ? "LIVE TRANSCRIPTION" : "TRANSCRIPT"}
             </span>
             {isRecording && !isPaused && (
               <span className="relative flex h-1.5 w-1.5">
@@ -332,25 +352,39 @@ export default function RecordsWorkstation() {
               <div className="whitespace-pre-wrap">{liveTranscript}</div>
             ) : (
               <div className="flex items-center justify-center h-full text-zinc-700 text-xs">
-                {isRecording ? "Listening..." : "Select a recording or start a new one"}
+                {isRecording && !sttEnabled
+                  ? "Recording audio only — STT is off"
+                  : isRecording
+                    ? "Listening..."
+                    : "Select a recording or start a new one"}
               </div>
             )}
             <div ref={transcriptEndRef} />
           </div>
         </div>
       </div>
+      </Panel>
+
+      {/* ─── Resize Handle ──────────────────────────────────────────── */}
+      <PanelResizeHandle className="w-[3px] bg-[#27272A] hover:bg-[#10B981]/50 active:bg-[#10B981] transition-colors cursor-col-resize shrink-0" />
 
       {/* ═══════════ RIGHT SIDEBAR ═══════════ */}
-      <div className="w-[320px] flex flex-col min-h-0 bg-[#0E0E0E]">
-        <div className="flex-1 min-h-0 border-b border-[#27272A] overflow-y-auto">
-          <AgenticAutomatePanel
-            recordingId={activeRecordingId || ""}
-            transcript={liveTranscript}
-            hasRecording={!!(activeRecordingId || hasUnsavedRecording)}
-            audioBlob={getCurrentAudioBlob()}
-          />
-        </div>
-        <div className="flex-1 min-h-0 flex flex-col">
+      <Panel defaultSize={45} minSize={25}>
+        <div className="flex flex-col h-full min-w-0 bg-[#0E0E0E]">
+        <PanelGroup direction="vertical" autoSaveId="records-sidebar">
+          <Panel defaultSize={45} minSize={20}>
+            <div className="h-full overflow-y-auto">
+              <AgenticAutomatePanel
+                recordingId={activeRecordingId || ""}
+                transcript={liveTranscript}
+                hasRecording={!!(activeRecordingId || hasUnsavedRecording)}
+                audioBlob={getCurrentAudioBlob()}
+              />
+            </div>
+          </Panel>
+          <PanelResizeHandle className="h-[3px] bg-[#27272A] hover:bg-[#10B981]/50 active:bg-[#10B981] transition-colors cursor-row-resize shrink-0" />
+          <Panel defaultSize={55} minSize={20}>
+            <div className="flex flex-col h-full min-h-0">
           <div className="px-3 py-2 border-b border-[#27272A]">
             <h3 className="text-[10px] font-semibold tracking-widest text-zinc-500 font-mono uppercase flex items-center gap-2">
               <Zap className="h-3 w-3" />Capture Queue
@@ -363,8 +397,12 @@ export default function RecordsWorkstation() {
               activeId={activeRecordingId}
             />
           </div>
+            </div>
+          </Panel>
+        </PanelGroup>
         </div>
-      </div>
+      </Panel>
+    </PanelGroup>
     </div>
   );
 }

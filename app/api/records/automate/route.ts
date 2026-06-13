@@ -24,7 +24,6 @@ export async function POST(request: NextRequest) {
     const transcript = (formData.get("transcript") as string) || "";
     const recordingId = (formData.get("recordingId") as string) || "";
     const action = (formData.get("action") as string) || "full_automate";
-    const workspaceContextStr = (formData.get("workspaceContext") as string) || "{}";
 
     if (!transcript.trim() && !audioFile) {
       return NextResponse.json(
@@ -59,7 +58,6 @@ export async function POST(request: NextRequest) {
     fastApiFormData.append("user_id", session.user.id);
     fastApiFormData.append("mode", "automate");
     fastApiFormData.append("action", action);
-    fastApiFormData.append("workspace_context", workspaceContextStr);
 
     if (audioFile && audioFile.size > 0) {
       fastApiFormData.append("audio", audioFile);

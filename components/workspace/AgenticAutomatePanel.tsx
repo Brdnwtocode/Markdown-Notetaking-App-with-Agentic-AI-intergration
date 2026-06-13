@@ -77,13 +77,6 @@ export default function AgenticAutomatePanel({
         formData.append("transcript", transcript);
         formData.append("recordingId", recordingId);
         formData.append("action", action);
-        formData.append(
-          "workspaceContext",
-          JSON.stringify({
-            activeNoteId: useWorkspaceStore.getState().currentNoteId,
-            activeStackId: useWorkspaceStore.getState().currentStackId,
-          }),
-        );
         if (audioBlob && audioBlob.size > 0) {
           formData.append("audio", audioBlob, "recording.webm");
         }

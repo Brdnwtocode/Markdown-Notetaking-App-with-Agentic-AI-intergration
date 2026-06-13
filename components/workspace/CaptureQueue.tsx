@@ -5,24 +5,22 @@
 // High-density data table of recording sessions (both saved & local).
 // Includes a drag-and-drop zone for importing external audio files.
 //
+// Interactions per row:
+//   Click → load audio + transcript into main workstation
+//   Rename (pencil) → inline edit title
+//   Save (cloud) → persist local recording to DB + S3
+//   Delete (trash) → remove from DB (saved) or discard (local)
+//
 // File validation:
 //   Accepted: .wav, .mp3, .webm, .ogg, .m4a, .flac, .aac
 //   Max size: 500 MB
-//
-// Local recordings show an "UNSAVED" badge until explicitly persisted.
 
 import { useCallback, useState, useRef } from "react";
 import { useWorkspaceStore } from "@/lib/store";
 import type { Recording, RecordStatus, LocalRecording } from "@/lib/slices/recordsSlice";
 import {
-  Circle,
-  CheckCircle2,
-  Loader2,
-  FileAudio,
-  Trash2,
-  ChevronRight,
-  Upload,
-  Save,
+  Circle, CheckCircle2, Loader2, FileAudio,
+  Trash2, Upload, Save, Pencil, Check, X, Play,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -35,14 +33,12 @@ const ACCEPTED_MIME = [
   "audio/webm", "audio/ogg", "audio/mp4", "audio/x-m4a", "audio/flac",
   "audio/aac", "audio/x-ms-wma",
 ];
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
 
 function isValidAudioFile(file: File): string | null {
   if (!file || file.size === 0) return "File is empty";
   const ext = "." + file.name.split(".").pop()?.toLowerCase();
-  const mimeOk = ACCEPTED_MIME.includes(file.type);
-  const extOk = ACCEPTED_EXTENSIONS.includes(ext || "");
-  if (!mimeOk && !extOk) {
+  if (!ACCEPTED_MIME.includes(file.type) && !ACCEPTED_EXTENSIONS.includes(ext || "")) {
     return `Unsupported: ${file.type || ext}. Accepted: ${ACCEPTED_EXTENSIONS.join(", ")}`;
   }
   if (file.size > MAX_FILE_SIZE) {
@@ -51,7 +47,7 @@ function isValidAudioFile(file: File): string | null {
   return null;
 }
 
-// ─── In-memory blob store (outside Zustand — Blobs aren't serializable) ──
+// ─── In-memory blob store ──────────────────────────────────────────────────
 const blobMap = new Map<string, Blob>();
 export function storeBlob(id: string, blob: Blob) { blobMap.set(id, blob); }
 export function getBlob(id: string): Blob | undefined { return blobMap.get(id); }
@@ -67,17 +63,16 @@ interface CaptureQueueProps {
 
 export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: CaptureQueueProps) {
   const {
-    recordings,
-    recordingsLoading,
-    localRecordings,
-    deleteRecording,
-    addLocalRecording,
-    removeLocalRecording,
-    setRecordings,
+    recordings, recordingsLoading, localRecordings,
+    deleteRecording, addLocalRecording, removeLocalRecording,
+    setRecordings, upsertRecording,
   } = useWorkspaceStore();
 
   const [isDragOver, setIsDragOver] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // ─── Process dropped/selected files ────────────────────────────────────
   const processFiles = useCallback(
@@ -88,15 +83,10 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
         if (error) { toast.error(error); continue; }
         const id = "local_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
         const local: LocalRecording = {
-          id,
-          title: file.name.replace(/\.[^.]+$/, ""),
-          durationSec: 0,
-          transcript: "",
-          createdAt: new Date().toISOString(),
-          source: "imported",
-          fileName: file.name,
-          fileSizeBytes: file.size,
-          mimeType: file.type || "audio/webm",
+          id, title: file.name.replace(/\.[^.]+$/, ""), durationSec: 0,
+          transcript: "", createdAt: new Date().toISOString(),
+          source: "imported", fileName: file.name,
+          fileSizeBytes: file.size, mimeType: file.type || "audio/webm",
         };
         storeBlob(id, file);
         addLocalRecording(local);
@@ -108,8 +98,7 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
   );
 
   const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
+    e.preventDefault(); setIsDragOver(false);
     if (e.dataTransfer.files.length) processFiles(e.dataTransfer.files);
   }, [processFiles]);
 
@@ -117,7 +106,7 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
     if (e.target.files?.length) { processFiles(e.target.files); e.target.value = ""; }
   }, [processFiles]);
 
-  // ─── Save local → persist to DB + S3 ───────────────────────────────────
+  // ─── Save local → DB + S3 ──────────────────────────────────────────────
   const handleSaveLocal = useCallback(async (e: React.MouseEvent, local: LocalRecording) => {
     e.stopPropagation();
     const blob = getBlob(local.id);
@@ -144,7 +133,6 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
           });
         }
       }
-
       removeLocalRecording(local.id);
       removeBlob(local.id);
       toast.success(`"${local.title}" saved`);
@@ -155,6 +143,61 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
     }
   }, [removeLocalRecording, setRecordings]);
 
+  // ─── Rename ────────────────────────────────────────────────────────────
+  const startRename = useCallback((e: React.MouseEvent, id: string, currentTitle: string) => {
+    e.stopPropagation();
+    setRenamingId(id);
+    setRenameValue(currentTitle);
+    setTimeout(() => renameInputRef.current?.focus(), 50);
+  }, []);
+
+  const commitRename = useCallback(async (id: string, isLocal: boolean) => {
+    const newTitle = renameValue.trim() || "Untitled Recording";
+    if (isLocal) {
+      // Update local recording title in Zustand
+      const store = useWorkspaceStore.getState();
+      const updated = store.localRecordings.map((r) =>
+        r.id === id ? { ...r, title: newTitle } : r,
+      );
+      useWorkspaceStore.setState({ localRecordings: updated });
+    } else {
+      // PATCH the server
+      try {
+        const res = await fetch(`/api/records/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title: newTitle }),
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          upsertRecording(updated);
+          toast.success("Renamed");
+        }
+      } catch { toast.error("Rename failed"); }
+    }
+    setRenamingId(null);
+  }, [renameValue, upsertRecording]);
+
+  const cancelRename = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setRenamingId(null);
+  }, []);
+
+  const handleRenameKey = useCallback((e: React.KeyboardEvent, id: string, isLocal: boolean) => {
+    if (e.key === "Enter") commitRename(id, isLocal);
+    if (e.key === "Escape") cancelRename();
+  }, [commitRename, cancelRename]);
+
+  // ─── Delete persisted recording ─────────────────────────────────────────
+  const handleDeletePersisted = useCallback(async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      await fetch(`/api/records/${id}`, { method: "DELETE" });
+      deleteRecording(id);
+      toast.success("Deleted");
+    } catch { toast.error("Delete failed"); }
+  }, [deleteRecording]);
+
   // ─── Status badge ───────────────────────────────────────────────────────
   const StatusBadge = ({ status }: { status: RecordStatus }) => {
     const map: Record<RecordStatus, { Icon: React.ElementType; label: string; cls: string }> = {
@@ -164,10 +207,9 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
       COMMITTED: { Icon: CheckCircle2, label: "COMMITTED", cls: "border-[#27272A] text-zinc-500" },
     };
     const { Icon, label, cls } = map[status];
-    const isPulse = status === "RECORDING" || status === "TRANSCRIBING";
     return (
       <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border rounded-sm text-[9px] font-mono font-semibold tracking-wider ${cls}`}>
-        {isPulse ? (
+        {(status === "RECORDING" || status === "TRANSCRIBING") ? (
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-current" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-current" />
@@ -198,51 +240,116 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-[#27272A] text-zinc-500 font-mono uppercase tracking-wider sticky top-0 bg-[#0E0E0E]">
-                <th className="text-left py-2 px-3 w-[90px]">Status</th>
-                <th className="text-left py-2 px-3">Title</th>
-                <th className="text-left py-2 px-3 w-[70px]">Duration</th>
-                <th className="text-right py-2 px-1 w-[60px]" />
+                <th className="text-left py-2 px-2 w-[80px]">Status</th>
+                <th className="text-left py-2 px-2">Title</th>
+                <th className="text-left py-2 px-2 w-[60px]">Time</th>
+                <th className="text-right py-2 px-1 w-[80px]">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {recordings.map((rec) => (
-                <tr key={rec.id} onClick={() => onSelect(rec)}
-                  className={`border-b border-[#27272A]/50 cursor-pointer transition-colors group ${rec.id === activeId ? "bg-[#10B981]/5" : "hover:bg-[#131313]"}`}>
-                  <td className="py-2 px-3"><StatusBadge status={rec.status} /></td>
-                  <td className="py-2 px-3"><div className="font-medium text-zinc-300 group-hover:text-white truncate max-w-[140px]">{rec.title}</div></td>
-                  <td className="py-2 px-3 font-mono text-zinc-500">{fmtDuration(rec.durationSec)}</td>
-                  <td className="py-2 px-1 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => { e.stopPropagation(); deleteRecording(rec.id); fetch(`/api/records/${rec.id}`, { method: "DELETE" }).catch(() => {}); }}
-                        className="p-1 hover:bg-red-500/10 rounded-sm text-zinc-600 hover:text-red-400"><Trash2 className="h-3 w-3" /></button>
-                      <ChevronRight className="h-3 w-3 text-zinc-700" />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {localRecordings.map((loc) => (
-                <tr key={loc.id} onClick={() => onSelectLocal(loc, getBlob(loc.id))}
-                  className={`border-b border-[#27272A]/50 cursor-pointer transition-colors group ${loc.id === activeId ? "bg-amber-500/5" : "hover:bg-[#131313]"}`}>
-                  <td className="py-2 px-3">
-                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border rounded-sm text-[9px] font-mono font-semibold tracking-wider border-amber-500/40 text-amber-400">
-                      <Circle className="h-2 w-2 fill-amber-400" />UNSAVED
-                    </span>
-                  </td>
-                  <td className="py-2 px-3">
-                    <div className="font-medium text-amber-300/80 group-hover:text-amber-200 truncate max-w-[140px]">{loc.title}</div>
-                    {loc.fileName && <div className="text-[9px] text-zinc-600 font-mono truncate">{loc.fileName}</div>}
-                  </td>
-                  <td className="py-2 px-3 font-mono text-zinc-500">{loc.durationSec > 0 ? fmtDuration(loc.durationSec) : "--:--"}</td>
-                  <td className="py-2 px-1 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={(e) => handleSaveLocal(e, loc)}
-                        className="p-1 hover:bg-[#10B981]/10 rounded-sm text-zinc-600 hover:text-[#10B981]" title="Save to cloud"><Save className="h-3 w-3" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); removeLocalRecording(loc.id); removeBlob(loc.id); }}
-                        className="p-1 hover:bg-red-500/10 rounded-sm text-zinc-600 hover:text-red-400" title="Discard"><Trash2 className="h-3 w-3" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {/* ─── Persisted recordings ──────────────────────────────── */}
+              {recordings.map((rec) => {
+                const isActive = rec.id === activeId;
+                const isRenaming = renamingId === rec.id;
+                return (
+                  <tr
+                    key={rec.id}
+                    onClick={() => { if (!isRenaming) onSelect(rec); }}
+                    className={`border-b border-[#27272A]/50 cursor-pointer transition-colors group ${isActive ? "bg-[#10B981]/5 border-l-2 border-l-[#10B981]" : "hover:bg-[#131313]"}`}
+                  >
+                    <td className="py-2 px-2"><StatusBadge status={rec.status} /></td>
+                    <td className="py-2 px-2">
+                      {isRenaming ? (
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            ref={renameInputRef}
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => handleRenameKey(e, rec.id, false)}
+                            className="bg-[#0E0E0E] border border-[#10B981]/50 rounded-sm px-1.5 py-0.5 text-xs text-white font-mono w-full outline-none"
+                            maxLength={100}
+                          />
+                          <button onClick={() => commitRename(rec.id, false)} className="p-0.5 hover:bg-[#10B981]/10 rounded-sm text-[#10B981]" title="Confirm"><Check className="h-3 w-3" /></button>
+                          <button onClick={cancelRename} className="p-0.5 hover:bg-red-500/10 rounded-sm text-zinc-500 hover:text-red-400" title="Cancel"><X className="h-3 w-3" /></button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          {isActive && <Play className="h-2.5 w-2.5 text-[#10B981] shrink-0" />}
+                          <span className="font-medium text-zinc-300 group-hover:text-white truncate max-w-[120px]">{rec.title}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2 px-2 font-mono text-zinc-500">{fmtDuration(rec.durationSec)}</td>
+                    <td className="py-2 px-1 text-right">
+                      <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => startRename(e, rec.id, rec.title)}
+                          className="p-1 hover:bg-white/5 rounded-sm text-zinc-600 hover:text-zinc-300" title="Rename"
+                        ><Pencil className="h-3 w-3" /></button>
+                        <button
+                          onClick={(e) => handleDeletePersisted(e, rec.id)}
+                          className="p-1 hover:bg-red-500/10 rounded-sm text-zinc-600 hover:text-red-400" title="Delete"
+                        ><Trash2 className="h-3 w-3" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {/* ─── Local (unsaved) recordings ────────────────────────── */}
+              {localRecordings.map((loc) => {
+                const isActive = loc.id === activeId;
+                const isRenaming = renamingId === loc.id;
+                return (
+                  <tr
+                    key={loc.id}
+                    onClick={() => { if (!isRenaming) onSelectLocal(loc, getBlob(loc.id)); }}
+                    className={`border-b border-[#27272A]/50 cursor-pointer transition-colors group ${isActive ? "bg-amber-500/5 border-l-2 border-l-amber-500" : "hover:bg-[#131313]"}`}
+                  >
+                    <td className="py-2 px-2">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border rounded-sm text-[9px] font-mono font-semibold tracking-wider border-amber-500/40 text-amber-400">
+                        <Circle className="h-2 w-2 fill-amber-400" />UNSAVED
+                      </span>
+                    </td>
+                    <td className="py-2 px-2">
+                      {isRenaming ? (
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            ref={renameInputRef}
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onKeyDown={(e) => handleRenameKey(e, loc.id, true)}
+                            className="bg-[#0E0E0E] border border-amber-500/50 rounded-sm px-1.5 py-0.5 text-xs text-white font-mono w-full outline-none"
+                            maxLength={100}
+                          />
+                          <button onClick={() => commitRename(loc.id, true)} className="p-0.5 hover:bg-[#10B981]/10 rounded-sm text-[#10B981]" title="Confirm"><Check className="h-3 w-3" /></button>
+                          <button onClick={cancelRename} className="p-0.5 hover:bg-red-500/10 rounded-sm text-zinc-500 hover:text-red-400" title="Cancel"><X className="h-3 w-3" /></button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          {isActive && <Play className="h-2.5 w-2.5 text-amber-400 shrink-0" />}
+                          <span className="font-medium text-amber-300/80 group-hover:text-amber-200 truncate max-w-[120px]">{loc.title}</span>
+                          {loc.fileName && <span className="text-[9px] text-zinc-600 font-mono truncate hidden sm:inline">({loc.fileName})</span>}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2 px-2 font-mono text-zinc-500">{loc.durationSec > 0 ? fmtDuration(loc.durationSec) : "--:--"}</td>
+                    <td className="py-2 px-1 text-right">
+                      <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={(e) => startRename(e, loc.id, loc.title)}
+                          className="p-1 hover:bg-white/5 rounded-sm text-zinc-600 hover:text-zinc-300" title="Rename"
+                        ><Pencil className="h-3 w-3" /></button>
+                        <button onClick={(e) => handleSaveLocal(e, loc)}
+                          className="p-1 hover:bg-[#10B981]/10 rounded-sm text-zinc-600 hover:text-[#10B981]" title="Save to cloud"
+                        ><Save className="h-3 w-3" /></button>
+                        <button onClick={(e) => { e.stopPropagation(); removeLocalRecording(loc.id); removeBlob(loc.id); }}
+                          className="p-1 hover:bg-red-500/10 rounded-sm text-zinc-600 hover:text-red-400" title="Discard"
+                        ><Trash2 className="h-3 w-3" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

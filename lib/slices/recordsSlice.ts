@@ -114,6 +114,7 @@ export interface RecordsSlice {
   // Recording state
   isRecording: boolean;
   isPaused: boolean;
+  sttEnabled: boolean;           // toggle real-time transcription on/off
   recordingId: string | null;
   recordingTitle: string;
   recordingDurationSec: number;
@@ -143,6 +144,7 @@ export interface RecordsSlice {
   // Actions — Recording lifecycle
   setIsRecording: (v: boolean) => void;
   setIsPaused: (v: boolean) => void;
+  setSttEnabled: (v: boolean) => void;
   setRecordingId: (id: string | null) => void;
   setRecordingTitle: (title: string) => void;
   setRecordingDurationSec: (sec: number) => void;
@@ -175,6 +177,7 @@ export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> =
   // Recording state
   isRecording: false,
   isPaused: false,
+  sttEnabled: true,
   recordingId: null,
   recordingTitle: "Untitled Recording",
   recordingDurationSec: 0,
@@ -199,6 +202,7 @@ export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> =
   // ─── Recording lifecycle ──────────────────────────────────────────────
   setIsRecording: (v) => set({ isRecording: v }),
   setIsPaused: (v) => set({ isPaused: v }),
+  setSttEnabled: (v) => set({ sttEnabled: v }),
   setRecordingId: (id) => set({ recordingId: id }),
   setRecordingTitle: (title) => set({ recordingTitle: title }),
   setRecordingDurationSec: (sec) => set({ recordingDurationSec: sec }),
@@ -209,6 +213,7 @@ export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> =
     set({
       isRecording: false,
       isPaused: false,
+      sttEnabled: true,
       recordingId: null,
       recordingTitle: "Untitled Recording",
       recordingDurationSec: 0,

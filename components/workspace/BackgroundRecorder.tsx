@@ -17,6 +17,7 @@ import { storeBlob } from "@/components/workspace/CaptureQueue";
 export default function BackgroundRecorder() {
   const isRecording = useWorkspaceStore((s) => s.isRecording);
   const isPaused = useWorkspaceStore((s) => s.isPaused);
+  const sttEnabled = useWorkspaceStore((s) => s.sttEnabled);
   const appendLiveTranscript = useWorkspaceStore((s) => s.appendLiveTranscript);
   const setLiveTranscript = useWorkspaceStore((s) => s.setLiveTranscript);
   const setIsRecording = useWorkspaceStore((s) => s.setIsRecording);
@@ -25,6 +26,9 @@ export default function BackgroundRecorder() {
   const wasRecordingRef = useRef(false);
   const durationTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pendingBlobIdRef = useRef<string | null>(null);
+
+  // Track STT state at start time — locked for the session duration
+  const sttLockedRef = useRef(false);
 
   // ─── STT Hook (persistent — won't unmount on tab switch) ──────────────
   const stt = useContinuousSTT({
@@ -49,24 +53,77 @@ export default function BackgroundRecorder() {
 
     // START recording
     if (isRecording && !wasRecording) {
-      stt.start().catch((err) => {
-        console.error("[BackgroundRecorder] Start failed:", err);
-        setIsRecording(false);
-      });
+      // Lock STT state for this session — can't change mid-record
+      sttLockedRef.current = sttEnabled;
+
+      if (sttLockedRef.current) {
+        stt.start().catch((err) => {
+          console.error("[BackgroundRecorder] Start failed:", err);
+          setIsRecording(false);
+        });
+      }
+      // If STT disabled, we just start MediaRecorder (handled inside start() regardless)
+      // but skip Deepgram. We still need the mic stream for the waveform.
+      // For now, the stt.start() call also acquires getUserMedia.
+      // When STT is off, we still need to start the mic for MediaRecorder.
+      if (!sttLockedRef.current) {
+        // Acquire mic just for MediaRecorder (fallback blob capture)
+        navigator.mediaDevices.getUserMedia({
+          audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+        }).then((stream) => {
+          const recorder = new MediaRecorder(stream, {
+            mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+              ? "audio/webm;codecs=opus" : "audio/webm",
+          });
+          const chunks: Blob[] = [];
+          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+          recorder.start(1000);
+          // Store for cleanup on stop
+          (window as any).__bgMediaRecorder = recorder;
+          (window as any).__bgMediaStream = stream;
+          (window as any).__bgChunks = chunks;
+        }).catch((err) => {
+          console.error("[BackgroundRecorder] Mic access failed:", err);
+          setIsRecording(false);
+        });
+      }
     }
 
     // STOP recording
     if (!isRecording && wasRecording) {
-      stt.stop().then(({ transcript, audioBlob }) => {
-        setLiveTranscript(transcript);
-        if (audioBlob && audioBlob.size > 0) {
-          const blobId = "bg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
-          pendingBlobIdRef.current = blobId;
-          storeBlob(blobId, audioBlob);
+      if (sttLockedRef.current) {
+        // STT was on — use stt.stop() which returns transcript + blob
+        stt.stop().then(({ transcript, audioBlob }) => {
+          setLiveTranscript(transcript);
+          if (audioBlob && audioBlob.size > 0) {
+            const blobId = "bg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+            pendingBlobIdRef.current = blobId;
+            storeBlob(blobId, audioBlob);
+          }
+        }).catch(console.error);
+      } else {
+        // STT was off — collect MediaRecorder blob manually
+        const recorder = (window as any).__bgMediaRecorder as MediaRecorder | undefined;
+        const stream = (window as any).__bgMediaStream as MediaStream | undefined;
+        const chunks = ((window as any).__bgChunks as Blob[]) || [];
+        if (recorder && recorder.state !== "inactive") {
+          recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: "audio/webm" });
+            if (blob.size > 0) {
+              const blobId = "bg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+              pendingBlobIdRef.current = blobId;
+              storeBlob(blobId, blob);
+            }
+          };
+          recorder.stop();
         }
-      }).catch(console.error);
+        stream?.getTracks().forEach((t) => t.stop());
+        delete (window as any).__bgMediaRecorder;
+        delete (window as any).__bgMediaStream;
+        delete (window as any).__bgChunks;
+      }
     }
-  }, [isRecording, stt, setIsRecording, setLiveTranscript]);
+  }, [isRecording, sttEnabled, stt, setIsRecording, setLiveTranscript]);
 
   // ─── Duration timer ──────────────────────────────────────────────────
   useEffect(() => {
@@ -87,8 +144,9 @@ export default function BackgroundRecorder() {
     };
   }, [isRecording, isPaused, setRecordingDurationSec]);
 
-  // ─── Pause/Resume ────────────────────────────────────────────────────
+  // ─── Pause/Resume (only when STT is active) ─────────────────────────
   useEffect(() => {
+    if (!sttLockedRef.current) return;
     if (isRecording && isPaused) {
       stt.pause();
     } else if (isRecording && !isPaused) {
