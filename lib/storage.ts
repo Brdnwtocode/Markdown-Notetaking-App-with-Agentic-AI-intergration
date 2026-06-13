@@ -110,7 +110,7 @@ export async function uploadFile(
     },
   });
 
-  const result = await upload.done();
+  await upload.done();
 
   // Build the public/presigned URL
   const url = await getSignedUrl(
@@ -119,10 +119,19 @@ export async function uploadFile(
     { expiresIn: 3600 * 24 * 7 }, // 7-day presigned URL by default
   );
 
+  // Determine size from the body since CompleteMultipartUploadCommandOutput
+  // doesn't include a Size property in the TypeScript types
+  let sizeBytes = 0;
+  if (body instanceof Buffer || body instanceof Uint8Array) {
+    sizeBytes = body.byteLength;
+  } else if (typeof body === "string") {
+    sizeBytes = Buffer.byteLength(body);
+  }
+
   return {
     key,
     url,
-    sizeBytes: result.Size || 0,
+    sizeBytes,
   };
 }
 

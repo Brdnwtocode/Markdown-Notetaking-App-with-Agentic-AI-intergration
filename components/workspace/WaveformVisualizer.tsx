@@ -101,7 +101,7 @@ export default function WaveformVisualizer({
 
       // Get frequency data
       const data = analyserRef.current
-        ? (analyserRef.current.getByteFrequencyData(dataArrayRef.current),
+        ? (analyserRef.current.getByteFrequencyData(dataArrayRef.current as Uint8Array<ArrayBuffer>),
           dataArrayRef.current)
         : getSimulatedData();
 

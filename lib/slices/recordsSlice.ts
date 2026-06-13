@@ -5,7 +5,6 @@
 
 import { StateCreator } from "zustand";
 import { RootStore } from "@/lib/store";
-import { apiJson } from "@/lib/api";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
