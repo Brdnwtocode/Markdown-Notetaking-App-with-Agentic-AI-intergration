@@ -5,7 +5,7 @@
 
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
-import { uploadFile, getDownloadUrl } from "@/lib/storage";
+import { uploadFile } from "@/lib/storage";
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 60;

@@ -20,6 +20,16 @@
 
 **Headers**: `x-session-id`, `x-user-id`
 
+### Audio handling
+
+- The BFF sends **one complete audio blob per request** — no chunking happens on the BFF side.
+- FastAPI is responsible for any internal chunking, parallel transcription, or streaming needed to process long recordings.
+- Max file size the BFF will forward: **500 MB**.
+- Real-time transcription during recording is handled separately by the frontend (Deepgram WebSocket). This endpoint is for **post-recording batch processing** — it may receive audio, a transcript, or both.
+- If only `audio` is provided (no `transcript`): FastAPI must transcribe it first, then run the LLM pipeline on the result.
+- If only `transcript` is provided (no `audio`): skip transcription, run the LLM pipeline directly.
+- If both are provided: use whichever yields better results; the transcript from the real-time STT may serve as a starting point.
+
 ---
 
 ## What FastAPI Must Return
