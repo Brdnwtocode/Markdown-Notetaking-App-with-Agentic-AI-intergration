@@ -1,0 +1,7 @@
+# Caddy reverse proxy with automatic Let's Encrypt SSL
+# Caddy obtains and renews certificates automatically — zero config needed.
+# Replace the domain below with your production domain.
+
+app.lockinworkspace.me {
+    reverse_proxy markdown-app:3000
+}

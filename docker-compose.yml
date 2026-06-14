@@ -1,16 +1,35 @@
 services:
+  # ─── Next.js Application ────────────────────────────────────────────────
   markdown-app:
     build: .
     container_name: markdown-notetaking-service
     restart: always
-    ports:
-      - "3000:3000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
       - .env.local
     depends_on:
       - minio
+    # Port 3000 exposed only on localhost — Caddy proxies public traffic
+    ports:
+      - "127.0.0.1:3000:3000"
+
+  # ─── Caddy Reverse Proxy (Auto-SSL) ─────────────────────────────────────
+  # Caddy automatically obtains & renews Let's Encrypt certificates.
+  # Update Caddyfile when changing domains.
+  caddy:
+    image: caddy:2-alpine
+    container_name: markdown-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - markdown-app
 
   # ─── MinIO ────────────────────────────────────────────────────────────────
   # Local S3-compatible storage for development.
@@ -32,4 +51,8 @@ services:
 
 volumes:
   minio_data:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
     driver: local

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signIn, signOut } from "next-auth/react";
+import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { ArrowRight, Zap, Mic, BookOpen, Play, Mail, Github } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -83,19 +83,13 @@ export default function LandingPage() {
               <Mail className="h-3.5 w-3.5" /> Email
             </button>
             <button
-              onClick={async () => {
-                await signOut({ redirect: false });
-                signIn("github");
-              }}
+              onClick={() => signIn("github")}
               className="border border-[#27272A] text-zinc-300 hover:text-white hover:bg-white/5 hover:border-zinc-500 rounded-none px-4 py-2 font-mono text-[11px] uppercase tracking-wider font-bold transition-all"
             >
               GitHub
             </button>
             <button
-              onClick={async () => {
-                await signOut({ redirect: false });
-                signIn("google");
-              }}
+              onClick={() => signIn("google")}
               className="bg-white text-[#0E0E0E] hover:bg-white/90 rounded-none px-4 py-2 font-mono text-[11px] uppercase tracking-wider font-bold transition-all"
             >
               Google

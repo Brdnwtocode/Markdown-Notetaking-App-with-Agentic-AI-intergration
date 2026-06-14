@@ -95,7 +95,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    signIn: async ({ user, account }) => {
+    signIn: async ({ user, account, profile }) => {
       // Allow all sign-ins; OAuthAccountNotLinked is thrown before this callback.
       // Log for debugging OAuth issues in development.
       if (process.env.NODE_ENV !== "production") {
@@ -106,6 +106,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           providerAccountId: account?.providerAccountId,
         });
       }
+
+      // Reject sign-in if OAuth account has no verified email (shouldn't happen,
+      // but guards against misconfigured OAuth providers returning empty emails).
+      if (account?.provider !== "credentials" && !user.email) {
+        console.error("[auth] OAuth sign-in blocked — no email on user object", {
+          provider: account?.provider,
+          providerAccountId: account?.providerAccountId,
+        });
+        return false;
+      }
+
       return true;
     },
     jwt: async ({ token, user, account }) => {
