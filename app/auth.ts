@@ -95,7 +95,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
+    signIn: async ({ user, account }) => {
+      // Allow all sign-ins; OAuthAccountNotLinked is thrown before this callback.
+      // Log for debugging OAuth issues in development.
+      if (process.env.NODE_ENV !== "production") {
+        console.log("[auth] signIn callback:", {
+          userId: user.id,
+          email: user.email,
+          provider: account?.provider,
+          providerAccountId: account?.providerAccountId,
+        });
+      }
+      return true;
+    },
     jwt: async ({ token, user, account }) => {
+      // ── Guard: if token has an id but the user was deleted from DB, clear it ──
+      // This prevents OAuthAccountNotLinked caused by stale JWT cookies
+      // referencing a user that no longer exists.
+      if (token.id && !user) {
+        const exists = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { id: true },
+        });
+        if (!exists) {
+          console.warn(
+            `[auth] Stale JWT detected — userId=${token.id} no longer exists. Clearing token.`
+          );
+          // Returning an empty token effectively signs out the stale session
+          return {};
+        }
+      }
+
       // On first sign-in (Credentials or OAuth), attach user.id and refresh token
       if (user) {
         token.id = user.id;

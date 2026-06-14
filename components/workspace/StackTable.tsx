@@ -95,6 +95,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
   const resizeColumnIdRef = useRef<string | null>(null);
   const resizeStartWidthRef = useRef(0);
   const dragColumnRef = useRef<string | null>(null);
+  const saveInProgressRef = useRef(false);
   
   const { notes, pendingMutation, setFocusedRow, setFocusedColumn, updateStack } = useWorkspaceStore();
   const router = useRouter();
@@ -109,18 +110,26 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
     updateStack({ ...storeStack, columns: cols, rows: rws });
   };
 
-  // Mark as dirty when any changes happen
+  // Mark as dirty when any user-driven changes happen (skip programmatic save sync)
   useEffect(() => {
+    if (saveInProgressRef.current) {
+      saveInProgressRef.current = false;
+      return;
+    }
     setIsDirty(true);
   }, [columns, rows]);
 
-  // Initialize column widths
+  // Initialize column widths only for new columns, preserving existing widths
   useEffect(() => {
-    const initialWidths: Record<string, number> = {};
-    columns.forEach((col) => {
-      initialWidths[col.id] = 180;
+    setColumnWidths((prev) => {
+      const next = { ...prev };
+      columns.forEach((col) => {
+        if (!(col.id in next)) {
+          next[col.id] = 180;
+        }
+      });
+      return next;
     });
-    setColumnWidths(initialWidths);
   }, [columns.map((c) => c.id).join(",")]);
 
   // Process rows (group, sort, filter)
@@ -328,6 +337,19 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
         columns: dbColumns,
         rows,
       });
+      // Sync local state with server response (replaces temp IDs with real IDs)
+      // Preserve FORMULA/RELATION types that were downgraded to TEXT for DB storage
+      const syncedColumns = res.data.columns.map((col: StackColumn, i: number) => {
+        const originalType = columns[i]?.type;
+        if (originalType === "FORMULA" || originalType === "RELATION") {
+          return { ...col, type: originalType };
+        }
+        return col;
+      });
+      // Gate the dirty/width effects so they skip this programmatic update
+      saveInProgressRef.current = true;
+      setColumns(syncedColumns);
+      setRows(res.data.rows);
       onSave(res.data);
       setLastUpdated(new Date().toISOString());
       setIsDirty(false);
@@ -470,7 +492,6 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
 
   const saveFormula = () => {
     if (!editingFormulaColumnId) return;
-    setFormulas(formulas.filter(f => f.columnId !== editingFormulaColumnId));
     setFormulas([...formulas.filter(f => f.columnId !== editingFormulaColumnId), {
       columnId: editingFormulaColumnId,
       type: selectedFormulaType,

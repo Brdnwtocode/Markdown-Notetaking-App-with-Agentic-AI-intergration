@@ -72,6 +72,40 @@ export type PendingMutation = {
     folderId?: string | null;
   };
 } | {
+  /**
+   * Bundled results from Agentic Automate (full_automate action).
+   * Carries note + tasks + calendar mutations in a single staging slot
+   * so the confirmation flow processes them all atomically.
+   */
+  type: "automate_results";
+  /** Suggested note (null if none) */
+  noteMutation: {
+    title: string;
+    content: string;
+    folderId?: string | null;
+  } | null;
+  /** Suggested tasks (empty array if none) */
+  taskMutations: Array<{
+    title: string;
+    description?: string;
+    status?: "TODO" | "IN_PROGRESS" | "DONE";
+    priority?: "LOW" | "MEDIUM" | "HIGH";
+    assignee?: string | null;
+    dueDate?: string | null;
+    parentId?: string | null;
+  }>;
+  /** Suggested calendar event (null if none) */
+  calendarMutation: {
+    title: string;
+    notes?: string;
+    startAt: string;
+    endAt: string;
+    allDay?: boolean;
+    color?: string;
+  } | null;
+  /** Optional summary text from the AI */
+  summary?: string;
+} | {
   // New: No action (conversational fallback with guidance)
   type: "none";
   message: string;
@@ -128,10 +162,8 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
     
     try {
       if (pendingMutation?.type === "add_stack_row") {
-        // Optimistic update first
+        // optimisticAddStackRow handles both local update AND API persistence internally
         optimisticAddStackRow(pendingMutation.stackId, pendingMutation.data);
-        // Then persist to DB
-        await apiClient.post(`/api/stacks/${pendingMutation.stackId}/rows`, pendingMutation.data);
       } else if (pendingMutation?.type === "update_note") {
         // Ghost-text confirmation: insert diff.content_to_insert at diff.cursor_position
         // with smart padding to prevent fusing with adjacent markdown tokens.
@@ -183,7 +215,8 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
       } else if (pendingMutation?.type === "create_task") {
         const d = pendingMutation.data;
         if (!d.title?.trim()) throw new Error("Task title is required");
-        const taskData = {
+        // optimisticCreateTask handles both local state AND API persistence internally
+        optimisticCreateTask({
           title: d.title.trim(),
           description: d.description ?? "",
           status: d.status ?? "TODO",
@@ -191,33 +224,25 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
           assignee: d.assignee ?? null,
           dueDate: d.dueDate ?? null,
           parentId: d.parentId ?? null,
-        };
-        // Optimistic update first
-        optimisticCreateTask(taskData);
-        // Then persist to DB
-        await apiClient.post("/api/tasks", taskData);
+        });
       } else if (pendingMutation?.type === "create_calendar_event") {
         const d = pendingMutation.data;
         if (!d.title?.trim()) throw new Error("Event title is required");
         if (!d.startAt || !d.endAt) throw new Error("Event start/end date is required");
-        const eventData = {
+        // optimisticCreateCalendarEvent handles both local state AND API persistence internally
+        optimisticCreateCalendarEvent({
           title: d.title.trim(),
           notes: d.notes ?? "",
           startAt: d.startAt,
           endAt: d.endAt,
           allDay: d.allDay ?? false,
           color: d.color ?? "#5645d4",
-        };
-        // Optimistic update first
-        optimisticCreateCalendarEvent(eventData);
-        // Then persist to DB
-        await apiClient.post("/api/events", eventData);
+        });
       } else if (pendingMutation?.type === "bulk_update_stack") {
         // Bulk update multiple rows in a stack
-        // Note: This requires a new API endpoint or extension to existing rows endpoint
-        // For now, we'll update each row individually
+        // Update each row individually via the existing PUT endpoint
         for (const update of pendingMutation.updates) {
-          await apiClient.patch(`/api/stacks/${pendingMutation.stackId}/rows/${update.rowId}`, {
+          await apiClient.put(`/api/stacks/${pendingMutation.stackId}/rows/${update.rowId}`, {
             data: update.data,
           });
         }
@@ -226,7 +251,8 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         // Unified task management
         if (pendingMutation.action === "create" && pendingMutation.data) {
           const d = pendingMutation.data;
-          const taskData = {
+          // optimisticCreateTask handles both local state AND API persistence internally
+          optimisticCreateTask({
             title: d.title!,
             description: d.description ?? "",
             status: d.status ?? "TODO",
@@ -234,9 +260,7 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
             assignee: d.assignee ?? null,
             dueDate: d.dueDate ?? null,
             parentId: d.parentId ?? null,
-          };
-          optimisticCreateTask(taskData);
-          await apiClient.post("/api/tasks", taskData);
+          });
         } else if (pendingMutation.action === "update" && pendingMutation.data?.id) {
           await apiClient.patch(`/api/tasks/${pendingMutation.data.id}`, pendingMutation.data);
         } else if (pendingMutation.action === "delete" && pendingMutation.data?.id) {
@@ -254,6 +278,56 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         const created = res.data;
         get().addNote(created);
         toast.success(`Note "${d.title}" created`);
+      } else if (pendingMutation?.type === "automate_results") {
+        // Process bundled Agentic Automate results atomically
+        const { noteMutation, taskMutations, calendarMutation } = pendingMutation;
+
+        if (noteMutation) {
+          const res = await apiClient.post("/api/notes", {
+            title: noteMutation.title.trim(),
+            content: noteMutation.content ?? "",
+            folderId: noteMutation.folderId ?? null,
+          });
+          get().addNote(res.data);
+          toast.success(`Note "${noteMutation.title}" created`);
+        }
+
+        for (const t of taskMutations) {
+          if (t.title?.trim()) {
+            // optimisticCreateTask handles both local state AND API persistence internally
+            optimisticCreateTask({
+              title: t.title.trim(),
+              description: t.description ?? "",
+              status: t.status ?? "TODO",
+              priority: t.priority ?? "MEDIUM",
+              assignee: t.assignee ?? null,
+              dueDate: t.dueDate ?? null,
+              parentId: t.parentId ?? null,
+            });
+          }
+        }
+        if (taskMutations.length > 0) {
+          toast.success(`${taskMutations.length} task(s) created`);
+        }
+
+        if (calendarMutation) {
+          // optimisticCreateCalendarEvent handles both local state AND API persistence internally
+          optimisticCreateCalendarEvent({
+            title: calendarMutation.title.trim(),
+            notes: calendarMutation.notes ?? "",
+            startAt: calendarMutation.startAt,
+            endAt: calendarMutation.endAt,
+            allDay: calendarMutation.allDay ?? false,
+            color: calendarMutation.color ?? "#5645d4",
+          });
+          toast.success(`Calendar event "${calendarMutation.title}" created`);
+        }
+
+        if (!noteMutation && taskMutations.length === 0 && !calendarMutation) {
+          toast(pendingMutation.summary || "Agentic Automate completed — no mutations generated", {
+            icon: "🤖",
+          });
+        }
       } else if (pendingMutation?.type === "summarize_context") {
         // No mutation needed - summary is in aiReply
         // Just clear the mutation without DB write
@@ -263,14 +337,14 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         toast(pendingMutation.message, { icon: "💡" });
       }
       
-      const undoableTypes = ["update_note", "create_task", "add_stack_row", "create_calendar_event", "create_note"];
+      const undoableTypes = ["update_note", "create_task", "add_stack_row", "create_calendar_event", "create_note", "automate_results"];
       const shouldSaveHistory = pendingMutation && undoableTypes.includes(pendingMutation.type);
       set({
         pendingMutation: null,
         mutationStatus: "IDLE",
         ...(shouldSaveHistory ? { lastConfirmedMutation: pendingMutation } : {}),
       });
-      if (pendingMutation?.type !== "summarize_context" && pendingMutation?.type !== "none" && pendingMutation?.type !== "create_note") {
+      if (pendingMutation?.type !== "summarize_context" && pendingMutation?.type !== "none" && pendingMutation?.type !== "create_note" && pendingMutation?.type !== "automate_results") {
         toast.success("Changes confirmed and saved!");
       }
     } catch (error) {

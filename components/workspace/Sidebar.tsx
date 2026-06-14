@@ -31,8 +31,7 @@ import {
   ChevronRight, Folder, FolderPlus, Trash2, Edit, GripVertical, Loader2, Disc
 } from "lucide-react";
 import { TASKS_TAB_ID, CALENDAR_TAB_ID } from "@/lib/constants";
-import { DndProvider, useDrag, useDrop } from "react-dnd";
-import { HTML5Backend } from "react-dnd-html5-backend";
+import { useDrag, useDrop } from "react-dnd";
 import { Folder as FolderType } from "@/lib/slices/foldersSlice";
 import { Note } from "@/lib/slices/notesSlice";
 import { Stack } from "@/lib/slices/stacksSlice";
@@ -899,9 +898,7 @@ export default function Sidebar() {
           </div>
 
           {mounted ? (
-            <DndProvider backend={HTML5Backend}>
-              <ExplorerTree searchQuery={searchQuery} sortMethod={sortMethod} actions={treeActions} />
-            </DndProvider>
+            <ExplorerTree searchQuery={searchQuery} sortMethod={sortMethod} actions={treeActions} />
           ) : (
             <div className="flex-1 overflow-auto p-2 space-y-2 scrollbar-thin scrollbar-thumb-zinc-800">
               <div className="flex justify-center items-center h-32 text-zinc-500">

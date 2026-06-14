@@ -162,15 +162,16 @@ export default function RecordsWorkstation() {
         const fd = new FormData();
         fd.append("audio", blob, `recording-${saved.id}.webm`);
         fd.append("recordingId", saved.id);
-        const upRes = await fetch("/api/records/upload", { method: "POST", body: fd });
-        if (upRes.ok) {
-          const upData = await upRes.json();
-          const patchRes = await fetch(`/api/records/${saved.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ audioKey: upData.key, audioSizeBytes: upData.sizeBytes, status: "COMMITTED" }),
-          });
-          audioUploaded = patchRes.ok;
+        try {
+          const upRes = await fetch("/api/records/upload", { method: "POST", body: fd });
+          if (upRes.ok) {
+            audioUploaded = true;
+          } else {
+            const errBody = await upRes.json().catch(() => ({}));
+            console.error("[RecordsWorkstation] Audio upload failed:", upRes.status, errBody);
+          }
+        } catch (uploadErr: any) {
+          console.error("[RecordsWorkstation] Audio upload network error:", uploadErr);
         }
       }
 

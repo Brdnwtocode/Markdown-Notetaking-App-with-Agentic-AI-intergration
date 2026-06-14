@@ -38,11 +38,11 @@ interface AgenticAutomatePanelProps {
 
 type ActionName =
   | "summarize"
-  | "extractTasks"
-  | "populateStack"
-  | "identifySpeakers"
-  | "createCalendar"
-  | "fullAutomate";
+  | "extract_tasks"
+  | "populate_stack"
+  | "identify_speakers"
+  | "create_calendar"
+  | "full_automate";
 
 export default function AgenticAutomatePanel({
   recordingId,
@@ -95,51 +95,43 @@ export default function AgenticAutomatePanel({
         setAutomateResult(result);
         setActiveAction(null);
 
-        // Stage mutations for user confirmation (suggestion-only pattern)
-        if (result.noteMutation) {
-          stageMutation({
-            type: "create_note",
-            data: {
-              title: result.noteMutation.title,
-              content: result.noteMutation.content,
-              folderId: result.noteMutation.folderId ?? result.noteMutation.folder_id ?? null,
-            },
-          });
-          toast.success("Note suggestion ready for review");
-        }
+        // Bundle ALL mutations into a single automate_results staging
+        // (the store only holds one pendingMutation — this ensures nothing is lost)
+        const hasNote = !!result.noteMutation;
+        const hasTasks = (result.taskMutations?.length ?? 0) > 0;
+        const hasCalendar = !!result.calendarMutation;
 
-        if (result.taskMutations?.length > 0) {
-          result.taskMutations.forEach((task: any) => {
-            stageMutation({
-              type: "create_task",
-              data: {
-                title: task.title,
-                description: task.description ?? task.description ?? "",
-                status: task.status || "TODO",
-                priority: task.priority || "MEDIUM",
-                assignee: task.assignee ?? task.assignee ?? null,
-                dueDate: task.dueDate ?? task.due_date ?? null,
-              },
-            });
-          });
-          toast.success(`${result.taskMutations.length} task(s) ready for review`);
-        }
-
-        if (result.calendarMutation) {
+        if (hasNote || hasTasks || hasCalendar) {
           stageMutation({
-            type: "create_calendar_event",
-            data: {
-              title: result.calendarMutation.title,
-              notes: result.calendarMutation.notes ?? result.calendarMutation.notes ?? "",
+            type: "automate_results",
+            noteMutation: result.noteMutation ?? null,
+            taskMutations: (result.taskMutations ?? []).map((t: any) => ({
+              title: t.title ?? "",
+              description: t.description ?? "",
+              status: t.status ?? "TODO",
+              priority: t.priority ?? "MEDIUM",
+              assignee: t.assignee ?? null,
+              dueDate: t.dueDate ?? t.due_date ?? null,
+              parentId: t.parentId ?? t.parent_id ?? null,
+            })),
+            calendarMutation: result.calendarMutation ? {
+              title: result.calendarMutation.title ?? "",
+              notes: result.calendarMutation.notes ?? "",
               startAt: result.calendarMutation.startAt ?? result.calendarMutation.start_at ?? new Date().toISOString(),
               endAt: result.calendarMutation.endAt ?? result.calendarMutation.end_at ?? new Date().toISOString(),
               allDay: result.calendarMutation.allDay ?? result.calendarMutation.all_day ?? false,
-            },
+              color: result.calendarMutation.color ?? "#5645d4",
+            } : null,
+            summary: result.summary ?? "",
           });
-          toast.success("Calendar event ready for review");
-        }
 
-        if (!result.noteMutation && !result.taskMutations?.length && !result.calendarMutation) {
+          // Show a unified toast summarizing what's ready for review
+          const parts: string[] = [];
+          if (hasNote) parts.push("Note");
+          if (hasTasks) parts.push(`${result.taskMutations.length} task(s)`);
+          if (hasCalendar) parts.push("Calendar event");
+          toast.success(`${parts.join(" + ")} ready for review`);
+        } else {
           toast(result.summary || "Agentic Automate completed — no mutations generated", {
             icon: "🤖",
           });
@@ -169,25 +161,25 @@ export default function AgenticAutomatePanel({
       desc: "Generate a markdown note from transcript",
     },
     {
-      id: "extractTasks",
+      id: "extract_tasks",
       label: "Extract Tasks",
       icon: CheckSquare,
       desc: "Parse action items into task list",
     },
     {
-      id: "populateStack",
+      id: "populate_stack",
       label: "Populate Stack",
       icon: Table2,
       desc: "Map transcript data into a structured stack",
     },
     {
-      id: "identifySpeakers",
+      id: "identify_speakers",
       label: "Identify Speakers",
       icon: Users,
       desc: "Label speakers via diarization",
     },
     {
-      id: "createCalendar",
+      id: "create_calendar",
       label: "Create Calendar Event",
       icon: CalendarDays,
       desc: "Extract date/time into calendar",
@@ -209,7 +201,7 @@ export default function AgenticAutomatePanel({
         <button
           type="button"
           disabled={isDisabled || automateLoading}
-          onClick={() => runAutomate("fullAutomate")}
+          onClick={() => runAutomate("full_automate")}
           className={`
             w-full flex items-center justify-center gap-2 px-4 py-3
             text-sm font-semibold font-mono uppercase tracking-wider
@@ -221,12 +213,12 @@ export default function AgenticAutomatePanel({
             }
           `}
         >
-          {automateLoading && activeAction === "fullAutomate" ? (
+          {automateLoading && activeAction === "full_automate" ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Zap className="h-4 w-4" />
           )}
-          {automateLoading && activeAction === "fullAutomate"
+          {automateLoading && activeAction === "full_automate"
             ? "PROCESSING..."
             : "RUN AUTOMATE"}
         </button>

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { uploadFile } from "@/lib/storage";
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "nodejs"; // Buffer, crypto, @aws-sdk are Node.js only
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
@@ -16,14 +17,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  let audioFile: File | null = null;
+  let recordingId: string | null = null;
+
   try {
     const formData = await request.formData();
-    const audioFile = formData.get("audio") as File | null;
-    const recordingId = formData.get("recordingId") as string | null;
+    audioFile = formData.get("audio") as File | null;
+    recordingId = formData.get("recordingId") as string | null;
 
     if (!audioFile) {
       return NextResponse.json(
         { error: "Audio file is required" },
+        { status: 400 },
+      );
+    }
+
+    if (audioFile.size === 0) {
+      return NextResponse.json(
+        { error: "Audio file is empty" },
         { status: 400 },
       );
     }
@@ -49,13 +60,27 @@ export async function POST(request: NextRequest) {
     }
 
     // Upload to S3
+    console.log("[Records Upload] Starting upload:", {
+      fileName: audioFile.name,
+      fileSize: audioFile.size,
+      fileType: audioFile.type,
+      recordingId,
+    });
+
     const buffer = Buffer.from(await audioFile.arrayBuffer());
+    console.log("[Records Upload] Buffer created, size:", buffer.byteLength);
+
     const result = await uploadFile(
       buffer,
       audioFile.name || "recording.webm",
       "records",
       audioFile.type || "audio/webm",
     );
+
+    console.log("[Records Upload] S3 upload result:", {
+      key: result.key,
+      sizeBytes: result.sizeBytes,
+    });
 
     // Link to recording if provided
     if (recordingId) {
@@ -66,6 +91,7 @@ export async function POST(request: NextRequest) {
           audioSizeBytes: result.sizeBytes,
         },
       });
+      console.log("[Records Upload] Recording updated with audio key:", recordingId);
     }
 
     return NextResponse.json({
@@ -74,10 +100,22 @@ export async function POST(request: NextRequest) {
       sizeBytes: result.sizeBytes,
       recordingId,
     }, { status: 201 });
-  } catch (error) {
-    console.error("[Records Upload] Error:", error);
+  } catch (error: any) {
+    console.error("[Records Upload] Error:", {
+      message: error?.message,
+      name: error?.name,
+      code: error?.Code || error?.code,
+      statusCode: error?.$metadata?.httpStatusCode,
+      requestId: error?.$metadata?.requestId,
+      fileName: audioFile?.name,
+      fileSize: audioFile?.size,
+      recordingId,
+    });
+    // Return the actual error message to help debugging
+    const errorMessage =
+      error?.message || error?.Code || error?.code || "Upload failed";
     return NextResponse.json(
-      { error: "Upload failed" },
+      { error: errorMessage },
       { status: 500 },
     );
   }

@@ -8,6 +8,8 @@ import { prisma } from "@/lib/prisma";
 import { getDownloadUrl } from "@/lib/storage";
 import { NextRequest, NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: { id: string } },

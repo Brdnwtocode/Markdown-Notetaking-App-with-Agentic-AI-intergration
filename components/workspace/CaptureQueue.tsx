@@ -53,6 +53,26 @@ export function storeBlob(id: string, blob: Blob) { blobMap.set(id, blob); }
 export function getBlob(id: string): Blob | undefined { return blobMap.get(id); }
 export function removeBlob(id: string) { blobMap.delete(id); }
 
+/** Extract audio duration (seconds) from a Blob via a temporary Audio element. */
+function getAudioDuration(blob: Blob): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio();
+    const objectUrl = URL.createObjectURL(blob);
+    audio.src = objectUrl;
+    const cleanup = () => URL.revokeObjectURL(objectUrl);
+    audio.addEventListener(
+      "loadedmetadata",
+      () => { cleanup(); resolve(Math.round(audio.duration) || 0); },
+      { once: true },
+    );
+    audio.addEventListener(
+      "error",
+      () => { cleanup(); reject(new Error("Failed to load audio for duration")); },
+      { once: true },
+    );
+  });
+}
+
 // ─── Props ─────────────────────────────────────────────────────────────────
 
 interface CaptureQueueProps {
@@ -119,11 +139,20 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
     const blob = getBlob(local.id);
     console.log("[CaptureQueue] Saving local recording:", { id: local.id, title: local.title, hasBlob: !!blob, blobSize: blob?.size });
 
+    // Extract real audio duration from the blob (imported files have durationSec: 0)
+    let durationSec = local.durationSec;
+    if (blob && durationSec === 0) {
+      try {
+        durationSec = await getAudioDuration(blob);
+        console.log("[CaptureQueue] Extracted audio duration:", durationSec, "s");
+      } catch { /* keep 0 */ }
+    }
+
     try {
       const res = await fetch("/api/records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: local.title, transcript: local.transcript, durationSec: local.durationSec }),
+        body: JSON.stringify({ title: local.title, transcript: local.transcript, durationSec }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
@@ -139,21 +168,22 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
         fd.append("audio", blob, local.fileName || `recording-${saved.id}.webm`);
         fd.append("recordingId", saved.id);
         console.log("[CaptureQueue] Uploading audio...");
-        const upRes = await fetch("/api/records/upload", { method: "POST", body: fd });
-        if (upRes.ok) {
-          const upData = await upRes.json();
-          console.log("[CaptureQueue] Audio uploaded:", upData.key);
-          const patchRes = await fetch(`/api/records/${saved.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ audioKey: upData.key, audioSizeBytes: upData.sizeBytes, status: "COMMITTED" }),
-          });
-          audioUploaded = patchRes.ok;
-          if (!patchRes.ok) {
-            console.error("[CaptureQueue] PATCH recording failed:", patchRes.status);
+        try {
+          const upRes = await fetch("/api/records/upload", { method: "POST", body: fd });
+          if (upRes.ok) {
+            const upData = await upRes.json();
+            console.log("[CaptureQueue] Audio uploaded:", upData.key);
+            // Note: the upload route already updates the recording with audioKey
+            // and audioSizeBytes in the DB — no need to PATCH again
+            audioUploaded = true;
+          } else {
+            const errBody = await upRes.json().catch(() => ({}));
+            console.error("[CaptureQueue] Audio upload failed:", upRes.status, errBody);
+            toast.error(`Upload error: ${errBody.error || upRes.status}`);
           }
-        } else {
-          console.error("[CaptureQueue] Audio upload failed:", upRes.status);
+        } catch (uploadErr: any) {
+          console.error("[CaptureQueue] Audio upload network error:", uploadErr);
+          toast.error(`Upload failed: ${uploadErr.message || "Network error"}`);
         }
       }
 
@@ -237,26 +267,28 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
     } catch { toast.error("Delete failed"); }
   }, [deleteRecording]);
 
-  // ─── Status badge ───────────────────────────────────────────────────────
+  // ─── Status badge (icon-only, label in tooltip) ───────────────────────
   const StatusBadge = ({ status }: { status: RecordStatus }) => {
     const map: Record<RecordStatus, { Icon: React.ElementType; label: string; cls: string }> = {
-      RECORDING: { Icon: Circle, label: "RECORDING", cls: "border-red-500/50 text-red-400" },
-      TRANSCRIBING: { Icon: Circle, label: "TRANSCRIBING", cls: "border-[#10B981]/50 text-[#10B981]" },
-      RESOLVING: { Icon: Loader2, label: "RESOLVING", cls: "border-amber-500/50 text-amber-400" },
-      COMMITTED: { Icon: CheckCircle2, label: "COMMITTED", cls: "border-[#27272A] text-zinc-500" },
+      RECORDING: { Icon: Circle, label: "Recording", cls: "border-red-500/50 text-red-400" },
+      TRANSCRIBING: { Icon: Circle, label: "Transcribing", cls: "border-[#10B981]/50 text-[#10B981]" },
+      RESOLVING: { Icon: Loader2, label: "Resolving", cls: "border-amber-500/50 text-amber-400" },
+      COMMITTED: { Icon: CheckCircle2, label: "Saved", cls: "border-[#27272A] text-zinc-500" },
     };
     const { Icon, label, cls } = map[status];
     return (
-      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border rounded-sm text-[9px] font-mono font-semibold tracking-wider ${cls}`}>
+      <span
+        className={`inline-flex items-center justify-center w-6 h-6 border rounded-sm ${cls}`}
+        title={label}
+      >
         {(status === "RECORDING" || status === "TRANSCRIBING") ? (
           <span className="relative flex h-1.5 w-1.5">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-current" />
             <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-current" />
           </span>
         ) : (
-          <Icon className={`h-2.5 w-2.5 ${status === "RESOLVING" ? "animate-spin" : ""}`} />
+          <Icon className={`h-3 w-3 ${status === "RESOLVING" ? "animate-spin" : ""}`} />
         )}
-        {label}
       </span>
     );
   };
@@ -279,7 +311,7 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-[#27272A] text-zinc-500 font-mono uppercase tracking-wider sticky top-0 bg-[#0E0E0E]">
-                <th className="text-left py-2 px-2 w-[80px]">Status</th>
+                <th className="text-left py-2 px-2 w-[40px]">Status</th>
                 <th className="text-left py-2 px-2">Title</th>
                 <th className="text-left py-2 px-2 w-[60px]">Time</th>
                 <th className="text-right py-2 px-1 w-[80px]">Actions</th>
@@ -346,8 +378,11 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
                     className={`border-b border-[#27272A]/50 cursor-pointer transition-colors group ${isActive ? "bg-amber-500/5 border-l-2 border-l-amber-500" : "hover:bg-[#131313]"}`}
                   >
                     <td className="py-2 px-2">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border rounded-sm text-[9px] font-mono font-semibold tracking-wider border-amber-500/40 text-amber-400">
-                        <Circle className="h-2 w-2 fill-amber-400" />UNSAVED
+                      <span
+                        className="inline-flex items-center justify-center w-6 h-6 border rounded-sm border-amber-500/40 text-amber-400"
+                        title="Unsaved — local only"
+                      >
+                        <Circle className="h-2.5 w-2.5 fill-amber-400" />
                       </span>
                     </td>
                     <td className="py-2 px-2">

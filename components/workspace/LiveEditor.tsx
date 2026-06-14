@@ -6,7 +6,6 @@ import { commonmark } from '@milkdown/preset-commonmark';
 import { gfm } from '@milkdown/preset-gfm';
 import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { history } from '@milkdown/plugin-history';
-import { tooltipFactory, TooltipProvider } from '@milkdown/plugin-tooltip';
 import { callCommand } from '@milkdown/utils';
 import {
   toggleStrongCommand,
@@ -42,68 +41,101 @@ import { useWorkspaceStore } from "@/lib/store";
 import * as Diff from 'diff';
 import { adjustCursorPosition, applySuggestionPadding } from "@/lib/utils";
 
-const tooltip = tooltipFactory('Text');
-
 interface LiveEditorProps {
   noteId: string;
   content: string;
 }
 
-const TooltipMenu = ({ toolbarRef }: { toolbarRef: React.RefObject<HTMLDivElement> }) => {
-  const [, get] = useInstance();
-
-  const onFormat = (e: React.MouseEvent, command: any) => {
-    e.preventDefault();
-    const editor = get();
-    if (!editor) return;
-    editor.action(callCommand(command));
-  };
-
-  return (
-    <div className="hidden">
-      <div 
-        ref={toolbarRef}
-        className="flex items-center gap-1 bg-[#131313] border border-[#27272A] rounded-none p-1 shadow-xl"
-      >
-        <button onMouseDown={(e) => onFormat(e, toggleStrongCommand.key)} className="p-1.5 hover:bg-white/5 rounded-none text-slate-300 hover:text-white transition-colors">
-          <Bold size={16} />
-        </button>
-        <button onMouseDown={(e) => onFormat(e, toggleEmphasisCommand.key)} className="p-1.5 hover:bg-white/5 rounded-none text-slate-300 hover:text-white transition-colors">
-          <Italic size={16} />
-        </button>
-        <button onMouseDown={(e) => onFormat(e, toggleStrikethroughCommand.key)} className="p-1.5 hover:bg-white/5 rounded-none text-slate-300 hover:text-white transition-colors">
-          <Strikethrough size={16} />
-        </button>
-        <button onMouseDown={(e) => onFormat(e, toggleInlineCodeCommand.key)} className="p-1.5 hover:bg-white/5 rounded-none text-slate-300 hover:text-white transition-colors">
-          <Code size={16} />
-        </button>
-        {/* Link is native in gfm but requires a custom prompt if not using default milkdown link command. We just add the button for Notion UI parity for now. */}
-        <button className="p-1.5 hover:bg-white/5 rounded-none text-slate-300 hover:text-white transition-colors">
-          <LinkIcon size={16} />
-        </button>
-      </div>
-    </div>
-  );
-};
-
-// ─── Sticky Markdown Toolbar ─────────────────────────────────────────────
-// Provides a persistent toolbar at the top of the editor so users can apply
-// Markdown formatting without knowing the syntax. All buttons use Milkdown
-// commands to operate on the ProseMirror document directly.
+// ═══════════════════════════════════════════════════════════════════════════
+//  MarkdownToolbar — Sticky formatting toolbar
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//  PURPOSE:
+//    Persistent toolbar at the top of the editor so users can apply Markdown
+//    formatting (headings, bold, lists, tables, etc.) without knowing the
+//    raw syntax. Replaces the old floating TooltipMenu (removed 2026-06-14).
+//
+//  INTEGRATION:
+//    Rendered inside <MilkdownProvider> but OUTSIDE the dimmed <div> in the
+//    main LiveEditor return. This keeps it interactive even during AI
+//    suggestion review (DiffOverlay). Uses useInstance() to access the
+//    Milkdown editor — the editor ref is populated asynchronously by
+//    EditorComponent's useEditor() hook, so get() may return undefined on
+//    the very first render cycle (guarded in exec/handleLink).
+//
+//  DEPENDENCIES (DO NOT REMOVE without understanding the full chain):
+//    - useInstance()         → React context from MilkdownProvider; provides
+//                              get() to access the Milkdown Editor instance.
+//    - editor.action(cb)     → Milkdown's wrapper: calls cb(this.#ctx)
+//                              synchronously. Used to access editorViewCtx
+//                              and to dispatch commands.
+//    - callCommand(key,args) → from @milkdown/utils; returns (ctx)=>boolean.
+//                              Resolves the command via commandsCtx.call().
+//    - editorViewCtx         → Milkdown ctx slice holding the ProseMirror
+//                              EditorView. The view.dispatch(tr) chain goes
+//                              through ALL ProseMirror plugins including
+//                              history (enabling Ctrl+Z undo).
+//
+//  CURSOR / FOCUS (critical for AI insert-at-cursor feature):
+//    EditorComponent tracks cursor position via ProseMirror DOM events
+//    (keyup/mouseup/blur) and writes to Zustand store (setCursorPosition).
+//    The ChatSidebar reads cursorPosition to send with voice/AI requests.
+//    DO NOT add blur-triggering side effects here — exec() explicitly
+//    refocuses the editor when needed via view.focus() to keep keyboard
+//    shortcuts working without disturbing cursor tracking.
+//
+//  BLOCK-LEVEL BUTTONS (headings, lists, blockquote, codeblock, hr, table):
+//    Use onMouseDown + e.preventDefault() — same as inline buttons — to
+//    prevent the editor from losing focus/selection before the command runs.
+//    Milkdown commands (wrapInHeadingCommand, etc.) read from state.selection
+//    which ProseMirror preserves even across blur events, but keeping focus
+//    is safer and avoids visual flicker.
+// ═══════════════════════════════════════════════════════════════════════════
 
 const btnBase =
   "p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[#10B981]/50";
 const divider = <div className="w-px h-5 bg-[#27272A] mx-1" />;
 
 const MarkdownToolbar = () => {
+  // ── useInstance(): [loading, getEditor] tuple ────────────────────
+  // The editor ref is populated when EditorComponent's useEditor()
+  // finishes creating the Milkdown instance. On first render get()
+  // may return undefined — all handlers guard against this.
   const [, get] = useInstance();
 
+  // ── exec(cmdKey, ...args) — central command dispatcher ───────────
+  // Step 1: Ensure the ProseMirror editorView has focus so keyboard
+  //         shortcuts (Ctrl+Z, Ctrl+B, etc.) work after toolbar use.
+  // Step 2: Dispatch the Milkdown command via editor.action(callCommand()).
+  //         This goes through commandsCtx.call() → command(state,dispatch,view)
+  //         → view.dispatch(tr) → all ProseMirror plugins (history, etc.).
+  //         Every call creates a history entry → fully undoable.
   const exec = (cmdKey: any, ...args: unknown[]) => {
     const editor = get();
     if (!editor) return;
+    // Phase 1: focus check (must happen in same editor.action context
+    // to access editorViewCtx; separate from command dispatch so focus
+    // is restored even if the command is a no-op)
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      if (view && !view.hasFocus()) {
+        view.focus();
+      }
+    });
+    // Phase 2: dispatch the actual command
     editor.action(callCommand(cmdKey, ...args));
   };
 
+  // ── handleLink() — custom link insertion/removal ─────────────────
+  // Milkdown's toggleLinkCommand toggles a link mark on selection but
+  // doesn't handle the "no selection" case (insert new linked text).
+  // This handler covers all three scenarios:
+  //   A) Selection + existing link  → remove the link mark
+  //   B) Selection + no link        → prompt URL, add link mark
+  //   C) No selection               → prompt text + URL, insert linked node
+  // Uses view.dispatch() directly (not callCommand) because the link
+  // mark payload (href) varies per interaction. Transactions dispatched
+  // via view.dispatch() still pass through the history plugin.
   const handleLink = () => {
     const editor = get();
     if (!editor) return;
@@ -111,16 +143,21 @@ const MarkdownToolbar = () => {
     editor.action((ctx) => {
       const view = ctx.get(editorViewCtx);
       if (!view) return;
+      if (!view.hasFocus()) {
+        view.focus();
+      }
       const { from, to, empty } = view.state.selection;
       const linkMarkType = view.state.schema.marks.link;
 
       if (!empty) {
-        // Selection exists → check if already a link
+        // Case A/B: text is selected
         const hasLink = view.state.doc.rangeHasMark(from, to, linkMarkType);
         if (hasLink) {
+          // Case A: remove existing link
           view.dispatch(view.state.tr.removeMark(from, to, linkMarkType));
           return;
         }
+        // Case B: add link to selection
         const url = window.prompt("Enter URL:", "https://");
         if (url) {
           view.dispatch(
@@ -128,7 +165,7 @@ const MarkdownToolbar = () => {
           );
         }
       } else {
-        // No selection → insert linked text
+        // Case C: no selection — insert new linked text at cursor
         const text = window.prompt("Enter link text:", "");
         if (!text) return;
         const url = window.prompt("Enter URL:", "https://");
@@ -144,21 +181,30 @@ const MarkdownToolbar = () => {
     <div className="sticky top-0 z-20 flex items-center gap-0.5 bg-[#0E0E0E] border-b border-[#27272A] px-2 py-1 overflow-x-auto select-none">
       {/* ── Headings ── */}
       <button
-        onClick={() => exec(wrapInHeadingCommand.key, 1)}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(wrapInHeadingCommand.key, 1);
+        }}
         title="Heading 1"
         className={btnBase}
       >
         <Heading1 size={17} />
       </button>
       <button
-        onClick={() => exec(wrapInHeadingCommand.key, 2)}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(wrapInHeadingCommand.key, 2);
+        }}
         title="Heading 2"
         className={btnBase}
       >
         <Heading2 size={17} />
       </button>
       <button
-        onClick={() => exec(wrapInHeadingCommand.key, 3)}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(wrapInHeadingCommand.key, 3);
+        }}
         title="Heading 3"
         className={btnBase}
       >
@@ -223,28 +269,40 @@ const MarkdownToolbar = () => {
 
       {/* ── Block elements ── */}
       <button
-        onClick={() => exec(wrapInBlockquoteCommand.key)}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(wrapInBlockquoteCommand.key);
+        }}
         title="Blockquote"
         className={btnBase}
       >
         <Quote size={17} />
       </button>
       <button
-        onClick={() => exec(wrapInBulletListCommand.key)}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(wrapInBulletListCommand.key);
+        }}
         title="Bullet list"
         className={btnBase}
       >
         <List size={17} />
       </button>
       <button
-        onClick={() => exec(wrapInOrderedListCommand.key)}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(wrapInOrderedListCommand.key);
+        }}
         title="Ordered list"
         className={btnBase}
       >
         <ListOrdered size={17} />
       </button>
       <button
-        onClick={() => exec(createCodeBlockCommand.key)}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(createCodeBlockCommand.key);
+        }}
         title="Code block"
         className={btnBase}
       >
@@ -255,14 +313,20 @@ const MarkdownToolbar = () => {
 
       {/* ── Insert ── */}
       <button
-        onClick={() => exec(insertHrCommand.key)}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(insertHrCommand.key);
+        }}
         title="Horizontal rule"
         className={btnBase}
       >
         <Minus size={17} />
       </button>
       <button
-        onClick={() => exec(insertTableCommand.key)}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(insertTableCommand.key);
+        }}
         title="Insert table"
         className={btnBase}
       >
@@ -273,10 +337,25 @@ const MarkdownToolbar = () => {
 };
 
 const EditorComponent = ({ content, noteId }: { content: string; noteId: string }) => {
+  // ═══════════════════════════════════════════════════════════════════
+  //  EditorComponent — Milkdown editor lifecycle + cursor tracking
+  // ═══════════════════════════════════════════════════════════════════
+  //
+  //  CURSOR TRACKING (DO NOT REMOVE — used by AI insert-at-cursor):
+  //    latestCursorPos ref + DOM event listeners (keyup/mouseup/blur)
+  //    feed cursorPosition into Zustand store (setCursorPosition).
+  //    ChatSidebar reads cursorPosition → sends to voice/AI API →
+  //    UniversalConfirmationToast inserts AI response at cursor.
+  //    The cursor restore effect (restoredOnce) re-applies cursor
+  //    position after note-switch key-based remounts.
+  //
+  //  AUTOSAVE (listenerCtx.markdownUpdated):
+  //    1-second debounce. Blocked during voice mutation
+  //    (isEntityVoiceMutating) to prevent overwriting AI edits.
+  // ═══════════════════════════════════════════════════════════════════
   const { setIsSaving, isEntityVoiceMutating, optimisticPatchNote, cursorPosition, setCursorPosition } = useWorkspaceStore();
   const autoSaveTimer = useRef<NodeJS.Timeout>();
   const isFirstMount = useRef(true);
-  const toolbarRef = useRef<HTMLDivElement>(null);
 
   // Ref to hold the latest ProseMirror selection position (survives across renders)
   const latestCursorPos = useRef<number>(cursorPosition);
@@ -288,6 +367,11 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
   // ─── Restore cursor after editor is ready ────────────────────────
   // With key-based remounting, defaultValueCtx handles content loading.
   // This effect only needs to restore the cursor position.
+  //
+  // NOTE FOR AGENTS: This is part of the AI insert-at-cursor pipeline.
+  // cursorPosition (Zustand) → ChatSidebar sends to voice API →
+  // AI response inserted at that position. Do not remove this effect
+  // or change the position tracking without updating the full chain.
   useEffect(() => {
     if (restoredOnce.current) return;
     restoredOnce.current = true;
@@ -336,6 +420,11 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
   // ─── Track cursor position via ProseMirror view ──────────────────
   // Instead of a raw ProseMirror Plugin (which can conflict with Milkdown),
   // we access the view directly through editorViewCtx and set up event listeners.
+  //
+  // NOTE FOR AGENTS: latestCursorPos → setCursorPosition → Zustand store.
+  // This is the SOURCE of cursorPosition used by ChatSidebar for AI voice
+  // insert-at-cursor. The handleBlur listener captures position on blur
+  // so the cursor is known even when the user clicks away to use chat.
   useEffect(() => {
     let cleanup: (() => void) | undefined;
 
@@ -402,15 +491,6 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
         root.className = 'ProseMirror-container px-4 py-2 text-white';
         ctx.set(rootCtx, root);
         ctx.set(defaultValueCtx, content);
-        // Configure tooltip view lazily — avoids race condition with plugin init
-        ctx.set(tooltip.key, {
-          view: () => {
-            const el = toolbarRef.current;
-            if (!el) return { destroy: () => {} } as any;
-            const provider = new TooltipProvider({ content: el });
-            return provider;
-          },
-        });
         ctx.get(listenerCtx).markdownUpdated((_ctx, markdown, _prevMarkdown) => {
           if (isFirstMount.current) {
             isFirstMount.current = false;
@@ -434,15 +514,11 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
       .use(commonmark)
       .use(gfm)
       .use(history)
-      .use(listener)
-      .use(tooltip);
+      .use(listener);
   }, [noteId]);
 
   return (
-    <>
-      <Milkdown />
-      <TooltipMenu toolbarRef={toolbarRef} />
-    </>
+    <Milkdown />
   );
 };
 
@@ -541,6 +617,21 @@ const DiffOverlay = ({ originalContent, newContent }: DiffOverlayProps) => {
 };
 
 // ─── Main LiveEditor ───────────────────────────────────────────────────
+//
+//  STRUCTURE (important for understanding z-index / sticky / dimming):
+//    <div.prose relative>           ← scroll container, positioning context
+//      {DiffOverlay absolute z-10}  ← shown during pending AI mutations
+//      <MilkdownProvider>           ← React context for useInstance/useEditor
+//        <MarkdownToolbar />        ← sticky top-0 z-20, OUTSIDE dimmed area
+//        <div dimmed?>              ← only wraps EditorComponent
+//          <EditorComponent>        ← Milkdown editor + cursor tracking
+//        </div>
+//      </MilkdownProvider>
+//    </div>
+//
+//  The toolbar is intentionally OUTSIDE the opacity/pointer-events wrapper
+//  so it stays interactive during AI suggestion review (DiffOverlay).
+// ═══════════════════════════════════════════════════════════════════════════
 
 export default function LiveEditor({ noteId, content }: LiveEditorProps) {
   const { pendingMutation } = useWorkspaceStore();

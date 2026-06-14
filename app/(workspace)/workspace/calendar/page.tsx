@@ -4,8 +4,6 @@ import { Calendar, SlotInfo, Event as RBCEvent, type View } from "react-big-cale
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
 import type { EventInteractionArgs } from "react-big-calendar/lib/addons/dragAndDrop";
 import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
-import { DndProvider } from "react-dnd";
-import { HTML5Backend } from "react-dnd-html5-backend";
 import { useDebouncedCallback } from "use-debounce";
 import { useWorkspaceStore } from "@/lib/store";
 import { CALENDAR_TAB_ID } from "@/lib/constants";
@@ -191,7 +189,6 @@ export default function CalendarPage() {
   };
 
   return (
-    <DndProvider backend={HTML5Backend}>
       <div className="h-full w-full bg-[#1e1e1e] p-4">
         <DnDCalendar
           localizer={calendarLocalizer}
@@ -256,6 +253,5 @@ export default function CalendarPage() {
           onDelete={editingEvent ? () => handleDelete(editingEvent.id) : undefined}
         />
       </div>
-    </DndProvider>
   );
 }

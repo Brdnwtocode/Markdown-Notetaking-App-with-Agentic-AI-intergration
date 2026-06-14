@@ -37,20 +37,37 @@ import { randomUUID } from "crypto";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
+function isAwsEndpoint(endpoint: string): boolean {
+  return endpoint.includes("amazonaws.com");
+}
+
 function getS3Client(): S3Client {
-  const endpoint = process.env.STORAGE_ENDPOINT || "http://localhost:9000";
+  const rawEndpoint = process.env.STORAGE_ENDPOINT || "";
   const region = process.env.STORAGE_REGION || "us-east-1";
   const forcePathStyle =
     process.env.STORAGE_FORCE_PATH_STYLE !== "false"; // default true for MinIO
 
+  const creds = {
+    accessKeyId: process.env.STORAGE_ACCESS_KEY || "minioadmin",
+    secretAccessKey: process.env.STORAGE_SECRET_KEY || "minioadmin",
+  };
+
+  // For AWS S3, do NOT set an explicit endpoint — let the SDK
+  // auto-resolve it from the region. Explicit endpoints are only
+  // needed for S3-compatible services (MinIO, R2, etc.).
+  if (rawEndpoint && !isAwsEndpoint(rawEndpoint)) {
+    return new S3Client({
+      endpoint: rawEndpoint,
+      region,
+      forcePathStyle,
+      credentials: creds,
+    });
+  }
+
   return new S3Client({
-    endpoint,
     region,
     forcePathStyle,
-    credentials: {
-      accessKeyId: process.env.STORAGE_ACCESS_KEY || "minioadmin",
-      secretAccessKey: process.env.STORAGE_SECRET_KEY || "minioadmin",
-    },
+    credentials: creds,
   });
 }
 
@@ -100,17 +117,33 @@ export async function uploadFile(
   const key = `${folder}/${randomUUID()}.${ext}`;
   const mime = contentType || mimeFromExt(ext);
 
-  const upload = new Upload({
-    client: client(),
-    params: {
-      Bucket: bucket,
-      Key: key,
-      Body: body,
-      ContentType: mime,
-    },
-  });
+  console.log("[storage] Uploading to bucket:", bucket, "key:", key, "mime:", mime);
 
-  await upload.done();
+  try {
+    const upload = new Upload({
+      client: client(),
+      params: {
+        Bucket: bucket,
+        Key: key,
+        Body: body,
+        ContentType: mime,
+      },
+    });
+
+    const result = await upload.done();
+    console.log("[storage] Upload completed:", { key, location: result.Location, etag: result.ETag });
+  } catch (err: any) {
+    console.error("[storage] Upload failed:", err.name, err.message);
+    // Log additional S3-specific error details
+    if (err.$metadata) {
+      console.error("[storage] S3 metadata:", {
+        httpStatusCode: err.$metadata.httpStatusCode,
+        requestId: err.$metadata.requestId,
+        extendedRequestId: err.$metadata.extendedRequestId,
+      });
+    }
+    throw err;
+  }
 
   // Build the public/presigned URL
   const url = await getSignedUrl(

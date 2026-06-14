@@ -111,8 +111,7 @@ export function useContinuousSTT({
       setStatusBoth("minting");
 
       // 1. Get Deepgram ephemeral key from our server (never exposed to browser)
-      //    Must use POST — the route only accepts POST (not GET)
-      const tokenRes = await fetch("/api/deepgram/token", { method: "POST" });
+      const tokenRes = await fetch("/api/deepgram/token"); // GET — route exports GET
       if (!tokenRes.ok) {
         const errBody = await tokenRes.json().catch(() => ({}));
         throw new Error(errBody.error || `Deepgram token failed (HTTP ${tokenRes.status})`);
