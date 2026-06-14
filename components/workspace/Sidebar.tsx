@@ -22,12 +22,13 @@ import SchemaBuilder, {
   ColumnDefinition,
 } from "@/components/workspace/SchemaBuilder";
 import axios from "axios";
+import { apiJson } from "@/lib/api";
 import toast from "react-hot-toast";
 import { 
   Plus, LogOut, Database, PanelLeftOpen, PanelLeftClose, 
   FileText, Table2, Search, ArrowUpAZ, ArrowDownAZ, 
   Calendar, Filter, CheckSquare, CalendarDays, MessageSquare,
-  ChevronRight, Folder, FolderPlus, Trash2, Edit, GripVertical, Loader2, Mic
+  ChevronRight, Folder, FolderPlus, Trash2, Edit, GripVertical, Loader2, Disc
 } from "lucide-react";
 import { TASKS_TAB_ID, CALENDAR_TAB_ID } from "@/lib/constants";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
@@ -697,8 +698,7 @@ export default function Sidebar() {
       });
       
       try {
-        const res = await fetch(`/api/folders/${folderId}`, { method: "DELETE", credentials: "include" });
-        if (!res.ok) throw new Error();
+        await apiJson(`/api/folders/${folderId}`, { method: "DELETE" });
         useWorkspaceStore.setState({ syncState: "SAVED", isSaving: false });
         toast.success("Folder deleted");
       } catch {
@@ -813,7 +813,7 @@ export default function Sidebar() {
           className="h-10 w-10 rounded-none hover:bg-white/5"
           title="Records"
         >
-          <Mic className="h-5 w-5 text-[#A1A1AA]" />
+          <Disc className="h-5 w-5 text-[#A1A1AA]" />
         </Button>
         <Button
           size="icon"

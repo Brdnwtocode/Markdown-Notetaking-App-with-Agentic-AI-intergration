@@ -98,13 +98,11 @@ export default function AgenticAutomatePanel({
         // Stage mutations for user confirmation (suggestion-only pattern)
         if (result.noteMutation) {
           stageMutation({
-            type: "update_note",
-            noteId: "",
-            originalContent: "",
-            diff: {
-              action_type: "append",
-              content_to_insert: `# ${result.noteMutation.title}\n\n${result.noteMutation.content}`,
-              cursor_position: 0,
+            type: "create_note",
+            data: {
+              title: result.noteMutation.title,
+              content: result.noteMutation.content,
+              folderId: result.noteMutation.folderId ?? result.noteMutation.folder_id ?? null,
             },
           });
           toast.success("Note suggestion ready for review");
@@ -116,11 +114,11 @@ export default function AgenticAutomatePanel({
               type: "create_task",
               data: {
                 title: task.title,
-                description: task.description,
+                description: task.description ?? task.description ?? "",
                 status: task.status || "TODO",
                 priority: task.priority || "MEDIUM",
-                assignee: task.assignee,
-                dueDate: task.dueDate,
+                assignee: task.assignee ?? task.assignee ?? null,
+                dueDate: task.dueDate ?? task.due_date ?? null,
               },
             });
           });
@@ -132,10 +130,10 @@ export default function AgenticAutomatePanel({
             type: "create_calendar_event",
             data: {
               title: result.calendarMutation.title,
-              notes: result.calendarMutation.notes,
-              startAt: result.calendarMutation.startAt,
-              endAt: result.calendarMutation.endAt,
-              allDay: result.calendarMutation.allDay,
+              notes: result.calendarMutation.notes ?? result.calendarMutation.notes ?? "",
+              startAt: result.calendarMutation.startAt ?? result.calendarMutation.start_at ?? new Date().toISOString(),
+              endAt: result.calendarMutation.endAt ?? result.calendarMutation.end_at ?? new Date().toISOString(),
+              allDay: result.calendarMutation.allDay ?? result.calendarMutation.all_day ?? false,
             },
           });
           toast.success("Calendar event ready for review");

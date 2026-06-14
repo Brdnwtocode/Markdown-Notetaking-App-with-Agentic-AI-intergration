@@ -15,6 +15,8 @@ export async function GET() {
       id: true,
       userId: true,
       title: true,
+      content: true,
+      folderId: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { title, folderId } = body;
+  const { title, content, folderId } = body;
 
   if (!title || typeof title !== "string") {
     return NextResponse.json(
@@ -45,7 +47,7 @@ export async function POST(request: NextRequest) {
     data: {
       userId: session.user.id,
       title,
-      content: "",
+      content: typeof content === "string" ? content : "",
       folderId: folderId || null,
     },
   });

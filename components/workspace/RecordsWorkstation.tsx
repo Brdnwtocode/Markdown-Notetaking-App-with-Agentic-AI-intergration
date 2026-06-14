@@ -125,17 +125,29 @@ export default function RecordsWorkstation() {
     const duration = useWorkspaceStore.getState().recordingDurationSec;
     const title = useWorkspaceStore.getState().recordingTitle;
 
-    // Get blob from BackgroundRecorder
-    const blobId = (useWorkspaceStore.getState() as any)._getPendingBlobId?.();
-    const blob = blobId ? getBlob(blobId) : null;
+    setIsSaving(true);
+
+    // Wait for BackgroundRecorder's async stt.stop() to store the blob.
+    // Poll up to ~9 s (30 × 300 ms) so rapid Save-after-Stop still captures audio.
+    let blob: Blob | undefined;
+    let blobId: string | null = null;
+    for (let i = 0; i < 30; i++) {
+      blobId = (useWorkspaceStore.getState() as any)._getPendingBlobId?.();
+      if (blobId) {
+        blob = getBlob(blobId);
+        if (blob && blob.size > 0) break;
+      }
+      await new Promise((r) => setTimeout(r, 300));
+    }
 
     if (!transcript.trim() && (!blob || blob.size === 0)) {
-      toast.error("Nothing to save");
+      toast.error("Nothing to save — recording is empty");
+      setIsSaving(false);
       return;
     }
 
-    setIsSaving(true);
     try {
+      // 1. Persist recording metadata
       const res = await fetch("/api/records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -144,6 +156,8 @@ export default function RecordsWorkstation() {
       if (!res.ok) { const err = await res.json(); throw new Error(err.error || "Save failed"); }
       const saved = await res.json();
 
+      // 2. Upload audio blob to S3 (if one was captured)
+      let audioUploaded = false;
       if (blob && blob.size > 0) {
         const fd = new FormData();
         fd.append("audio", blob, `recording-${saved.id}.webm`);
@@ -151,19 +165,29 @@ export default function RecordsWorkstation() {
         const upRes = await fetch("/api/records/upload", { method: "POST", body: fd });
         if (upRes.ok) {
           const upData = await upRes.json();
-          await fetch(`/api/records/${saved.id}`, {
+          const patchRes = await fetch(`/api/records/${saved.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ audioKey: upData.key, audioSizeBytes: upData.sizeBytes, status: "COMMITTED" }),
           });
+          audioUploaded = patchRes.ok;
         }
       }
 
+      // 3. Clean up local state
       if (blobId) { removeBlob(blobId); (useWorkspaceStore.getState() as any)._clearPendingBlobId?.(); }
       setHasUnsavedRecording(false);
       resetRecordingState();
-      toast.success(`"${title}" saved`);
 
+      if (audioUploaded) {
+        toast.success(`"${title}" saved with audio`);
+      } else if (blob && blob.size > 0) {
+        toast.success(`"${title}" saved (audio upload failed — metadata saved)`);
+      } else {
+        toast.success(`"${title}" saved (no audio file — transcript saved)`);
+      }
+
+      // 4. Refresh the recordings list
       const listRes = await fetch("/api/records");
       if (listRes.ok) setRecordings(await listRes.json());
     } catch (err: any) {
@@ -180,8 +204,13 @@ export default function RecordsWorkstation() {
     setHasUnsavedRecording(false);
     if (rec.audioKey) {
       try {
-        const { getDownloadUrl } = await import("@/lib/storage");
-        setAudioUrl(await getDownloadUrl(rec.audioKey));
+        const res = await fetch(`/api/records/${rec.id}/audio`);
+        if (res.ok) {
+          const { url } = await res.json();
+          setAudioUrl(url);
+        } else {
+          setAudioUrl(null);
+        }
       } catch { setAudioUrl(null); }
     } else { setAudioUrl(null); }
   }, [setActiveRecordingId, setLiveTranscript]);

@@ -111,8 +111,12 @@ export function useContinuousSTT({
       setStatusBoth("minting");
 
       // 1. Get Deepgram ephemeral key from our server (never exposed to browser)
-      const tokenRes = await fetch("/api/deepgram/token");
-      if (!tokenRes.ok) throw new Error("Failed to get Deepgram token");
+      //    Must use POST — the route only accepts POST (not GET)
+      const tokenRes = await fetch("/api/deepgram/token", { method: "POST" });
+      if (!tokenRes.ok) {
+        const errBody = await tokenRes.json().catch(() => ({}));
+        throw new Error(errBody.error || `Deepgram token failed (HTTP ${tokenRes.status})`);
+      }
       const { token } = await tokenRes.json();
 
       // 2. Acquire mic
@@ -226,9 +230,12 @@ export function useContinuousSTT({
     } catch (err: any) {
       console.error("[ContinuousSTT] Start failed:", err);
       setStatusBoth("error");
-      toast.error("Microphone access denied or connection failed");
+      // Clean up anything that may have been partially set up (mic stream, etc.)
+      cleanup();
+      // Re-throw so the caller (BackgroundRecorder) can fall back or reset state
+      throw err;
     }
-  }, [setStatusBoth, language, model, onInterimTranscript, onFinalizedSegment]);
+  }, [setStatusBoth, language, model, onInterimTranscript, onFinalizedSegment, cleanup]);
 
   // ─── Pause / Resume ────────────────────────────────────────────────────────
 

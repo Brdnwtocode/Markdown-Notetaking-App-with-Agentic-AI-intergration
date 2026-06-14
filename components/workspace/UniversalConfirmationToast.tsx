@@ -58,6 +58,10 @@ export default function UniversalConfirmationToast() {
   } else if (pendingMutation.type === "create_calendar_event") {
     title = "AI EVENT READY";
     summary = `Review proposed calendar event: "${pendingMutation.data.title}"`;
+  } else if (pendingMutation.type === "create_note") {
+    title = "AI NOTE READY";
+    const preview = pendingMutation.data.content?.slice(0, 120) || "";
+    summary = `"${pendingMutation.data.title}"\n${preview}${preview.length >= 120 ? "…" : ""}`;
   } else if (pendingMutation.type === "manage_tasks") {
     title = "AI TASK READY";
     const actionStr = pendingMutation.action === "create" ? "creation" : pendingMutation.action === "update" ? "update" : "deletion";

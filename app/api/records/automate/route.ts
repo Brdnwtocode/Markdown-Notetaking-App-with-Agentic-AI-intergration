@@ -100,7 +100,10 @@ export async function POST(request: NextRequest) {
 
     const result = await fastApiResponse.json();
 
-    // Store mutations on the Recording row (audit trail)
+    // Deep-normalize: convert all snake_case keys to camelCase recursively
+    const normalized = deepNormalize(result);
+
+    // Store mutations on the Recording row (audit trail) — use raw result for DB
     if (recordingId) {
       await prisma.recording.update({
         where: { id: recordingId },
@@ -117,17 +120,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Normalize to camelCase for the frontend
-    const normalized = {
-      noteMutation: result.note_mutation || result.noteMutation || null,
-      taskMutations: result.task_mutations || result.taskMutations || [],
-      stackMutation: result.stack_mutation || result.stackMutation || null,
-      calendarMutation: result.calendar_mutation || result.calendarMutation || null,
-      speakerLabels: result.speaker_labels || result.speakerLabels || null,
-      summary: result.summary || null,
-    };
-
-    console.log("[Records Automate] Success");
+    console.log("[Records Automate] Success:", JSON.stringify(normalized).slice(0, 200));
     return NextResponse.json(normalized);
   } catch (error) {
     console.error("[Records Automate] Error:", error);
@@ -136,4 +129,23 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function toCamel(s: string): string {
+  return s.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+}
+
+function deepNormalize(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) return obj.map(deepNormalize);
+  if (typeof obj === "object" && !(obj instanceof File) && !(obj instanceof Blob)) {
+    const out: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      out[toCamel(key)] = deepNormalize(value);
+    }
+    return out;
+  }
+  return obj;
 }

@@ -71,6 +71,8 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
   const [isDragOver, setIsDragOver] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [savingLocalId, setSavingLocalId] = useState<string | null>(null);
+  const savingRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
@@ -109,37 +111,74 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
   // ─── Save local → DB + S3 ──────────────────────────────────────────────
   const handleSaveLocal = useCallback(async (e: React.MouseEvent, local: LocalRecording) => {
     e.stopPropagation();
+    // Guard via ref — keeps useCallback deps stable (no savingLocalId)
+    if (savingRef.current === local.id) return;
+    savingRef.current = local.id;
+    setSavingLocalId(local.id);
+
     const blob = getBlob(local.id);
+    console.log("[CaptureQueue] Saving local recording:", { id: local.id, title: local.title, hasBlob: !!blob, blobSize: blob?.size });
+
     try {
       const res = await fetch("/api/records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: local.title, transcript: local.transcript, durationSec: local.durationSec }),
       });
-      if (!res.ok) throw new Error("Failed to create record");
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        console.error("[CaptureQueue] Create record failed:", res.status, errBody);
+        throw new Error(errBody.error || `Server error ${res.status}`);
+      }
       const saved = await res.json();
+      console.log("[CaptureQueue] Record created:", saved.id);
 
+      let audioUploaded = false;
       if (blob && blob.size > 0) {
         const fd = new FormData();
         fd.append("audio", blob, local.fileName || `recording-${saved.id}.webm`);
         fd.append("recordingId", saved.id);
+        console.log("[CaptureQueue] Uploading audio...");
         const upRes = await fetch("/api/records/upload", { method: "POST", body: fd });
         if (upRes.ok) {
           const upData = await upRes.json();
-          await fetch(`/api/records/${saved.id}`, {
+          console.log("[CaptureQueue] Audio uploaded:", upData.key);
+          const patchRes = await fetch(`/api/records/${saved.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ audioKey: upData.key, audioSizeBytes: upData.sizeBytes, status: "COMMITTED" }),
           });
+          audioUploaded = patchRes.ok;
+          if (!patchRes.ok) {
+            console.error("[CaptureQueue] PATCH recording failed:", patchRes.status);
+          }
+        } else {
+          console.error("[CaptureQueue] Audio upload failed:", upRes.status);
         }
       }
-      removeLocalRecording(local.id);
-      removeBlob(local.id);
-      toast.success(`"${local.title}" saved`);
+
+      // Only discard the local recording if the save fully succeeded
+      if (audioUploaded || !blob) {
+        removeLocalRecording(local.id);
+        removeBlob(local.id);
+        if (audioUploaded) {
+          toast.success(`"${local.title}" saved with audio`);
+        } else {
+          toast.success(`"${local.title}" saved`);
+        }
+      } else {
+        // Audio upload failed — keep the local recording so user can retry
+        toast.error(`"${local.title}" saved but audio upload failed — click Save to retry`);
+      }
+
       const listRes = await fetch("/api/records");
       if (listRes.ok) setRecordings(await listRes.json());
     } catch (err: any) {
+      console.error("[CaptureQueue] Save failed:", err);
       toast.error(err.message || "Save failed");
+    } finally {
+      savingRef.current = null;
+      setSavingLocalId(null);
     }
   }, [removeLocalRecording, setRecordings]);
 
@@ -340,8 +379,9 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
                           className="p-1 hover:bg-white/5 rounded-sm text-zinc-600 hover:text-zinc-300" title="Rename"
                         ><Pencil className="h-3 w-3" /></button>
                         <button onClick={(e) => handleSaveLocal(e, loc)}
-                          className="p-1 hover:bg-[#10B981]/10 rounded-sm text-zinc-600 hover:text-[#10B981]" title="Save to cloud"
-                        ><Save className="h-3 w-3" /></button>
+                          disabled={savingLocalId === loc.id}
+                          className="p-1 hover:bg-[#10B981]/10 rounded-sm text-zinc-600 hover:text-[#10B981] disabled:opacity-40 disabled:cursor-not-allowed" title="Save to cloud"
+                        >{savingLocalId === loc.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}</button>
                         <button onClick={(e) => { e.stopPropagation(); removeLocalRecording(loc.id); removeBlob(loc.id); }}
                           className="p-1 hover:bg-red-500/10 rounded-sm text-zinc-600 hover:text-red-400" title="Discard"
                         ><Trash2 className="h-3 w-3" /></button>

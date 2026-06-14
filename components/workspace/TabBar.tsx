@@ -1,7 +1,7 @@
 "use client";
 
 import { useWorkspaceStore } from "@/lib/store";
-import { X, Cloud, Loader, CheckSquare, CalendarDays, Check, Minus } from "lucide-react";
+import { X, Cloud, Loader, CheckSquare, CalendarDays, Check, Minus, Disc } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 function getTabHref(tab: { id: string; type: string; title: string }): string {
@@ -123,6 +123,11 @@ export default function TabBar() {
                   <>
                     <CalendarDays className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden />
                     <span className="font-technical uppercase text-[10px]">Calendar</span>
+                  </>
+                ) : tab.type === "RECORDS" ? (
+                  <>
+                    <Disc className="h-3.5 w-3.5 shrink-0 text-zinc-400" aria-hidden />
+                    <span className="font-technical uppercase text-[10px]">Records</span>
                   </>
                 ) : (
                   <span className="truncate max-w-[120px]">{tab.title}</span>

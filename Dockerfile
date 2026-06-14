@@ -62,5 +62,6 @@ EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
-# Command to run database sync and start server
-CMD npx prisma db push && npm run start
+# Apply pending Prisma migrations (safe — never drops tables unless a
+# migration explicitly says so), then start the Next.js server.
+CMD npx prisma migrate deploy && npm run start

@@ -64,6 +64,14 @@ export type PendingMutation = {
   type: "summarize_context";
   summary: string;
 } | {
+  /** Create a brand-new note from AI-generated content (Records Automate, etc.) */
+  type: "create_note";
+  data: {
+    title: string;
+    content: string;
+    folderId?: string | null;
+  };
+} | {
   // New: No action (conversational fallback with guidance)
   type: "none";
   message: string;
@@ -174,8 +182,9 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         }
       } else if (pendingMutation?.type === "create_task") {
         const d = pendingMutation.data;
+        if (!d.title?.trim()) throw new Error("Task title is required");
         const taskData = {
-          title: d.title,
+          title: d.title.trim(),
           description: d.description ?? "",
           status: d.status ?? "TODO",
           priority: d.priority ?? "MEDIUM",
@@ -189,8 +198,10 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         await apiClient.post("/api/tasks", taskData);
       } else if (pendingMutation?.type === "create_calendar_event") {
         const d = pendingMutation.data;
+        if (!d.title?.trim()) throw new Error("Event title is required");
+        if (!d.startAt || !d.endAt) throw new Error("Event start/end date is required");
         const eventData = {
-          title: d.title,
+          title: d.title.trim(),
           notes: d.notes ?? "",
           startAt: d.startAt,
           endAt: d.endAt,
@@ -231,6 +242,18 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         } else if (pendingMutation.action === "delete" && pendingMutation.data?.id) {
           await apiClient.delete(`/api/tasks/${pendingMutation.data.id}`);
         }
+      } else if (pendingMutation?.type === "create_note") {
+        const d = pendingMutation.data;
+        if (!d.title?.trim()) throw new Error("Note title is required");
+        // API call — no optimistic update needed (new note, not editing existing)
+        const res = await apiClient.post("/api/notes", {
+          title: d.title.trim(),
+          content: d.content ?? "",
+          folderId: d.folderId ?? null,
+        });
+        const created = res.data;
+        get().addNote(created);
+        toast.success(`Note "${d.title}" created`);
       } else if (pendingMutation?.type === "summarize_context") {
         // No mutation needed - summary is in aiReply
         // Just clear the mutation without DB write
@@ -240,14 +263,14 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         toast(pendingMutation.message, { icon: "💡" });
       }
       
-      const undoableTypes = ["update_note", "create_task", "add_stack_row", "create_calendar_event"];
+      const undoableTypes = ["update_note", "create_task", "add_stack_row", "create_calendar_event", "create_note"];
       const shouldSaveHistory = pendingMutation && undoableTypes.includes(pendingMutation.type);
       set({
         pendingMutation: null,
         mutationStatus: "IDLE",
         ...(shouldSaveHistory ? { lastConfirmedMutation: pendingMutation } : {}),
       });
-      if (pendingMutation?.type !== "summarize_context" && pendingMutation?.type !== "none") {
+      if (pendingMutation?.type !== "summarize_context" && pendingMutation?.type !== "none" && pendingMutation?.type !== "create_note") {
         toast.success("Changes confirmed and saved!");
       }
     } catch (error) {
@@ -319,6 +342,7 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
           ),
         }));
       }
+      // create_note: no optimistic update to roll back (API call happens before store update)
       
       // Show error message
       const message = isAxiosError(error) && error.response?.data?.error

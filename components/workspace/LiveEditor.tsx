@@ -8,9 +8,34 @@ import { listener, listenerCtx } from '@milkdown/plugin-listener';
 import { history } from '@milkdown/plugin-history';
 import { tooltipFactory, TooltipProvider } from '@milkdown/plugin-tooltip';
 import { callCommand } from '@milkdown/utils';
-import { toggleStrongCommand, toggleEmphasisCommand, toggleInlineCodeCommand } from '@milkdown/preset-commonmark';
-import { toggleStrikethroughCommand } from '@milkdown/preset-gfm';
-import { Bold, Italic, Strikethrough, Code, Link as LinkIcon } from 'lucide-react';
+import {
+  toggleStrongCommand,
+  toggleEmphasisCommand,
+  toggleInlineCodeCommand,
+  wrapInHeadingCommand,
+  wrapInBlockquoteCommand,
+  wrapInBulletListCommand,
+  wrapInOrderedListCommand,
+  insertHrCommand,
+  createCodeBlockCommand,
+} from '@milkdown/preset-commonmark';
+import { toggleStrikethroughCommand, insertTableCommand } from '@milkdown/preset-gfm';
+import {
+  Bold,
+  Italic,
+  Strikethrough,
+  Code,
+  Link as LinkIcon,
+  Heading1,
+  Heading2,
+  Heading3,
+  List,
+  ListOrdered,
+  Quote,
+  Minus,
+  Code2,
+  Table,
+} from 'lucide-react';
 import { useRef, useEffect } from 'react';
 import { TextSelection } from 'prosemirror-state';
 import { useWorkspaceStore } from "@/lib/store";
@@ -57,6 +82,192 @@ const TooltipMenu = ({ toolbarRef }: { toolbarRef: React.RefObject<HTMLDivElemen
           <LinkIcon size={16} />
         </button>
       </div>
+    </div>
+  );
+};
+
+// ─── Sticky Markdown Toolbar ─────────────────────────────────────────────
+// Provides a persistent toolbar at the top of the editor so users can apply
+// Markdown formatting without knowing the syntax. All buttons use Milkdown
+// commands to operate on the ProseMirror document directly.
+
+const btnBase =
+  "p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[#10B981]/50";
+const divider = <div className="w-px h-5 bg-[#27272A] mx-1" />;
+
+const MarkdownToolbar = () => {
+  const [, get] = useInstance();
+
+  const exec = (cmdKey: any, ...args: unknown[]) => {
+    const editor = get();
+    if (!editor) return;
+    editor.action(callCommand(cmdKey, ...args));
+  };
+
+  const handleLink = () => {
+    const editor = get();
+    if (!editor) return;
+
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      if (!view) return;
+      const { from, to, empty } = view.state.selection;
+      const linkMarkType = view.state.schema.marks.link;
+
+      if (!empty) {
+        // Selection exists → check if already a link
+        const hasLink = view.state.doc.rangeHasMark(from, to, linkMarkType);
+        if (hasLink) {
+          view.dispatch(view.state.tr.removeMark(from, to, linkMarkType));
+          return;
+        }
+        const url = window.prompt("Enter URL:", "https://");
+        if (url) {
+          view.dispatch(
+            view.state.tr.addMark(from, to, linkMarkType.create({ href: url }))
+          );
+        }
+      } else {
+        // No selection → insert linked text
+        const text = window.prompt("Enter link text:", "");
+        if (!text) return;
+        const url = window.prompt("Enter URL:", "https://");
+        if (!url) return;
+        const linkMark = linkMarkType.create({ href: url });
+        const linkNode = view.state.schema.text(text, [linkMark]);
+        view.dispatch(view.state.tr.insert(from, linkNode));
+      }
+    });
+  };
+
+  return (
+    <div className="sticky top-0 z-20 flex items-center gap-0.5 bg-[#0E0E0E] border-b border-[#27272A] px-2 py-1 overflow-x-auto select-none">
+      {/* ── Headings ── */}
+      <button
+        onClick={() => exec(wrapInHeadingCommand.key, 1)}
+        title="Heading 1"
+        className={btnBase}
+      >
+        <Heading1 size={17} />
+      </button>
+      <button
+        onClick={() => exec(wrapInHeadingCommand.key, 2)}
+        title="Heading 2"
+        className={btnBase}
+      >
+        <Heading2 size={17} />
+      </button>
+      <button
+        onClick={() => exec(wrapInHeadingCommand.key, 3)}
+        title="Heading 3"
+        className={btnBase}
+      >
+        <Heading3 size={17} />
+      </button>
+
+      {divider}
+
+      {/* ── Inline formatting ── */}
+      <button
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(toggleStrongCommand.key);
+        }}
+        title="Bold"
+        className={btnBase}
+      >
+        <Bold size={17} />
+      </button>
+      <button
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(toggleEmphasisCommand.key);
+        }}
+        title="Italic"
+        className={btnBase}
+      >
+        <Italic size={17} />
+      </button>
+      <button
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(toggleStrikethroughCommand.key);
+        }}
+        title="Strikethrough"
+        className={btnBase}
+      >
+        <Strikethrough size={17} />
+      </button>
+      <button
+        onMouseDown={(e) => {
+          e.preventDefault();
+          exec(toggleInlineCodeCommand.key);
+        }}
+        title="Inline code"
+        className={btnBase}
+      >
+        <Code size={17} />
+      </button>
+      <button
+        onMouseDown={(e) => {
+          e.preventDefault();
+          handleLink();
+        }}
+        title="Link"
+        className={btnBase}
+      >
+        <LinkIcon size={17} />
+      </button>
+
+      {divider}
+
+      {/* ── Block elements ── */}
+      <button
+        onClick={() => exec(wrapInBlockquoteCommand.key)}
+        title="Blockquote"
+        className={btnBase}
+      >
+        <Quote size={17} />
+      </button>
+      <button
+        onClick={() => exec(wrapInBulletListCommand.key)}
+        title="Bullet list"
+        className={btnBase}
+      >
+        <List size={17} />
+      </button>
+      <button
+        onClick={() => exec(wrapInOrderedListCommand.key)}
+        title="Ordered list"
+        className={btnBase}
+      >
+        <ListOrdered size={17} />
+      </button>
+      <button
+        onClick={() => exec(createCodeBlockCommand.key)}
+        title="Code block"
+        className={btnBase}
+      >
+        <Code2 size={17} />
+      </button>
+
+      {divider}
+
+      {/* ── Insert ── */}
+      <button
+        onClick={() => exec(insertHrCommand.key)}
+        title="Horizontal rule"
+        className={btnBase}
+      >
+        <Minus size={17} />
+      </button>
+      <button
+        onClick={() => exec(insertTableCommand.key)}
+        title="Insert table"
+        className={btnBase}
+      >
+        <Table size={16} />
+      </button>
     </div>
   );
 };
@@ -362,13 +573,16 @@ export default function LiveEditor({ noteId, content }: LiveEditorProps) {
         />
       )}
 
-      <div className={isPending ? "opacity-30 pointer-events-none select-none" : ""}>
-        <MilkdownProvider>
+      <MilkdownProvider>
+        {/* Sticky toolbar stays interactive even during AI suggestion review */}
+        <MarkdownToolbar />
+
+        <div className={isPending ? "opacity-30 pointer-events-none select-none" : ""}>
           {/* Key-based remounting ensures editor always picks up latest content via defaultValueCtx.
               Cursor position is tracked via DOM events + Zustand store, so it survives remounts. */}
           <EditorComponent key={`active-${noteId}`} content={content} noteId={noteId} />
-        </MilkdownProvider>
-      </div>
+        </div>
+      </MilkdownProvider>
     </div>
   );
 }

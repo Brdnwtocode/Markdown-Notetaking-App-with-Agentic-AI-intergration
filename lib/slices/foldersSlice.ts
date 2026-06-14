@@ -77,12 +77,11 @@ export const createFoldersSlice: StateCreator<RootStore, [], [], FoldersSlice> =
 
   fetchFolders: async () => {
     try {
-      const res = await fetch("/api/folders", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch folders");
-      const data = await res.json();
+      const data = await apiJson<Folder[]>("/api/folders");
       set({ folders: data });
     } catch (error) {
       console.error("Failed to fetch folders", error);
+      toast.error("Failed to load folders");
     }
   },
 
@@ -135,12 +134,10 @@ export const createFoldersSlice: StateCreator<RootStore, [], [], FoldersSlice> =
         return { tempId: id, realId: created.id };
       })
       .catch((e) => {
-        // Revert store state to snapshot
+        // Revert only folder-related state to snapshot (don't touch notes/stacks)
         set({
           folders: snapshot.folders,
           expandedFolderIds: snapshot.expandedFolderIds,
-          notes: snapshot.notes,
-          stacks: snapshot.stacks,
           syncState: "ERROR",
           isSaving: false,
         });

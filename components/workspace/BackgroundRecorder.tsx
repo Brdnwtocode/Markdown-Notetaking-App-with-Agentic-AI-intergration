@@ -13,6 +13,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useWorkspaceStore } from "@/lib/store";
 import { useContinuousSTT } from "@/lib/hooks/useContinuousSTT";
 import { storeBlob } from "@/components/workspace/CaptureQueue";
+import toast from "react-hot-toast";
 
 export default function BackgroundRecorder() {
   const isRecording = useWorkspaceStore((s) => s.isRecording);
@@ -29,6 +30,31 @@ export default function BackgroundRecorder() {
 
   // Track STT state at start time — locked for the session duration
   const sttLockedRef = useRef(false);
+
+  // ─── Helper: start mic-only recording (no STT / Deepgram) ────────────
+  const startMicOnlyRecording = useCallback(() => {
+    navigator.mediaDevices.getUserMedia({
+      audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
+    }).then((stream) => {
+      const recorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus" : "audio/webm",
+      });
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      recorder.start(1000);
+      (window as any).__bgMediaRecorder = recorder;
+      (window as any).__bgMediaStream = stream;
+      (window as any).__bgChunks = chunks;
+      toast.success("Recording audio (STT off)");
+    }).catch((err) => {
+      console.error("[BackgroundRecorder] Mic access failed:", err);
+      toast.error(err instanceof DOMException && err.name === "NotAllowedError"
+        ? "Microphone access denied — please allow mic permissions"
+        : `Microphone error: ${err.message}`);
+      setIsRecording(false);
+    });
+  }, [setIsRecording]);
 
   // ─── STT Hook (persistent — won't unmount on tab switch) ──────────────
   const stt = useContinuousSTT({
@@ -58,34 +84,18 @@ export default function BackgroundRecorder() {
 
       if (sttLockedRef.current) {
         stt.start().catch((err) => {
-          console.error("[BackgroundRecorder] Start failed:", err);
-          setIsRecording(false);
+          console.error("[BackgroundRecorder] STT start failed:", err);
+          // Fall back to recording without STT (MediaRecorder-only mode)
+          const message = err instanceof Error ? err.message : "Speech-to-text unavailable";
+          toast.error(`${message} — recording audio only`);
+          // Retry without STT: flip the locked ref and start mic-only recording
+          sttLockedRef.current = false;
+          startMicOnlyRecording();
         });
       }
-      // If STT disabled, we just start MediaRecorder (handled inside start() regardless)
-      // but skip Deepgram. We still need the mic stream for the waveform.
-      // For now, the stt.start() call also acquires getUserMedia.
-      // When STT is off, we still need to start the mic for MediaRecorder.
+      // If STT disabled (or fell back), start mic-only recording
       if (!sttLockedRef.current) {
-        // Acquire mic just for MediaRecorder (fallback blob capture)
-        navigator.mediaDevices.getUserMedia({
-          audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
-        }).then((stream) => {
-          const recorder = new MediaRecorder(stream, {
-            mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-              ? "audio/webm;codecs=opus" : "audio/webm",
-          });
-          const chunks: Blob[] = [];
-          recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-          recorder.start(1000);
-          // Store for cleanup on stop
-          (window as any).__bgMediaRecorder = recorder;
-          (window as any).__bgMediaStream = stream;
-          (window as any).__bgChunks = chunks;
-        }).catch((err) => {
-          console.error("[BackgroundRecorder] Mic access failed:", err);
-          setIsRecording(false);
-        });
+        startMicOnlyRecording();
       }
     }
 
