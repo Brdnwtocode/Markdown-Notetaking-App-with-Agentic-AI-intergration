@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, Zap, Mic, BookOpen, Play, Mail, Github } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -16,6 +17,24 @@ export default function LandingPage() {
   const [currentText, setCurrentText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
+  // Redirect authenticated users to /workspace
+  useEffect(() => {
+    if (status === "authenticated") {
+      router.replace("/workspace");
+    }
+  }, [status, router]);
+
+  // Don't flash the landing page while checking session
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0E0E0E]">
+        <div className="w-4 h-4 border-2 border-[#10B981] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   useEffect(() => {
     const handlePageShow = () => {
