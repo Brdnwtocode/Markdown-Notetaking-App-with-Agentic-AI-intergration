@@ -1,46 +1,35 @@
 import { PrismaClient } from "@prisma/client";
 const p = new PrismaClient();
 
-const [users, accounts, notes, stacks, folders, tasks, events, recordings] = await Promise.all([
-  p.user.count(),
-  p.account.count(),
-  p.note.count(),
-  p.stack.count(),
-  p.folder.count(),
-  p.task.count(),
-  p.calendarEvent.count(),
-  p.recording.count(),
-]);
+const users = await p.user.findMany({
+  select: { id: true, email: true, name: true, password: true, createdAt: true },
+  orderBy: { createdAt: "asc" },
+});
+console.log("=== USERS ===");
+users.forEach((u, i) => {
+  console.log(`[${i + 1}] ${u.email} | id=${u.id.slice(0, 8)}... | pwd=${u.password ? "YES" : "null"} | ${u.createdAt.toISOString()}`);
+});
 
-console.log("Users:         ", users);
-console.log("Accounts:      ", accounts);
-console.log("Notes:         ", notes);
-console.log("Stacks:        ", stacks);
-console.log("Folders:       ", folders);
-console.log("Tasks:         ", tasks);
-console.log("CalendarEvents:", events);
-console.log("Recordings:    ", recordings);
+const accounts = await p.account.findMany({
+  select: { id: true, userId: true, provider: true, providerAccountId: true },
+});
+console.log("\n=== ACCOUNTS ===");
+accounts.forEach((a, i) => {
+  const user = users.find(u => u.id === a.userId);
+  console.log(`[${i + 1}] ${a.provider}:${a.providerAccountId.slice(0, 12)}... → user=${user?.email || "ORPHAN"}`);
+});
 
-// Also check for orphaned data (userId that no longer exists)
-const allUserIds = new Set((await p.user.findMany({ select: { id: true } })).map(u => u.id));
+// Check for orphaned accounts
+const allUserIds = new Set(users.map(u => u.id));
+const orphans = accounts.filter(a => !allUserIds.has(a.userId));
+if (orphans.length > 0) {
+  console.log(`\n⚠️  ${orphans.length} ORPHANED Account row(s) — userId doesn't exist in User table!`);
+}
 
-const orphanNotes = await p.note.findMany({ select: { userId: true } });
-const orphanStacks = await p.stack.findMany({ select: { userId: true } });
-const orphanFolders = await p.folder.findMany({ select: { userId: true } });
-const orphanTasks = await p.task.findMany({ select: { userId: true } });
-const orphanEvents = await p.calendarEvent.findMany({ select: { userId: true } });
-const orphanRecordings = await p.recording.findMany({ select: { userId: true } });
-
-const check = (label, items) => {
-  const orphans = items.filter(i => !allUserIds.has(i.userId));
-  if (orphans.length > 0) console.log(`ORPHANED ${label}:`, orphans.length, "rows (dangling userIds)");
-};
-
-check("Notes", orphanNotes);
-check("Stacks", orphanStacks);
-check("Folders", orphanFolders);
-check("Tasks", orphanTasks);
-check("CalendarEvents", orphanEvents);
-check("Recordings", orphanRecordings);
+// Show notes & recordings
+const notes = await p.note.findMany({ select: { id: true, title: true, userId: true } });
+const recs = await p.recording.findMany({ select: { id: true, title: true, userId: true } });
+console.log(`\n=== DATA ===`);
+console.log(`Notes: ${notes.length}, Recordings: ${recs.length}`);
 
 await p.$disconnect();

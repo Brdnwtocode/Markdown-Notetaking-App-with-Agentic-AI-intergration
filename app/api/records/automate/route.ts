@@ -140,7 +140,11 @@ function toCamel(s: string): string {
 function deepNormalize(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (Array.isArray(obj)) return obj.map(deepNormalize);
-  if (typeof obj === "object" && !(obj instanceof File) && !(obj instanceof Blob)) {
+  // Guard instanceof checks — File and Blob are browser-only globals,
+  // undefined in the Node.js server runtime used by Next.js route handlers.
+  const isFile = typeof File !== "undefined" && obj instanceof File;
+  const isBlob = typeof Blob !== "undefined" && obj instanceof Blob;
+  if (typeof obj === "object" && !isFile && !isBlob) {
     const out: Record<string, any> = {};
     for (const [key, value] of Object.entries(obj)) {
       out[toCamel(key)] = deepNormalize(value);
