@@ -123,17 +123,27 @@ jobs:
               sudo apt-get install -y -qq nginx certbot python3-certbot-nginx
             fi
 
+            # ── Clean up any old configs for this domain ──────────────
+            # Remove all existing symlinks and configs that reference this domain
+            # to prevent "conflicting server name" errors on reload.
+            sudo rm -f "/etc/nginx/sites-enabled/${NGINX_DOMAIN}.conf"
+            sudo rm -f "/etc/nginx/sites-available/${NGINX_DOMAIN}.conf"
+            sudo rm -f /etc/nginx/sites-enabled/default
+            # Clear any certbot configs that might hold the domain from prior runs
+            sudo rm -f "/etc/nginx/sites-enabled/${NGINX_DOMAIN}*.conf" 2>/dev/null || true
+
             # Deploy nginx site config from repo template
             sudo cp nginx/site.conf "/etc/nginx/sites-available/${NGINX_DOMAIN}.conf"
             sudo sed -i "s/__DOMAIN__/${NGINX_DOMAIN}/g" "/etc/nginx/sites-available/${NGINX_DOMAIN}.conf"
             sudo ln -sf "/etc/nginx/sites-available/${NGINX_DOMAIN}.conf" /etc/nginx/sites-enabled/
 
-            # Remove default site if it conflicts
-            sudo rm -f /etc/nginx/sites-enabled/default
-
-            # Test and reload nginx
+            # Test config, then start (or restart if already running)
             sudo nginx -t
-            sudo systemctl reload nginx
+            if sudo systemctl is-active --quiet nginx; then
+              sudo systemctl restart nginx
+            else
+              sudo systemctl start nginx
+            fi
 
             # Obtain SSL certificate (idempotent — skips if already valid)
             sudo certbot --nginx -d "${NGINX_DOMAIN}" --non-interactive --agree-tos --email "admin@${NGINX_DOMAIN}" --redirect 2>/dev/null || echo "[deploy] Certbot skipped (port 80 must be publicly reachable for ACME challenge)"
