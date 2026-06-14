@@ -95,7 +95,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    signIn: async ({ user, account, profile }) => {
+    signIn: async ({ user, account }) => {
       // Allow all sign-ins; OAuthAccountNotLinked is thrown before this callback.
       // Log for debugging OAuth issues in development.
       if (process.env.NODE_ENV !== "production") {
