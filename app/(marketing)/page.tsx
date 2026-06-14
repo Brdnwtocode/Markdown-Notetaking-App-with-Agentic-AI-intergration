@@ -227,10 +227,7 @@ export default function LandingPage() {
                 Create Account <ArrowRight className="h-4 w-4" />
               </button>
               <button
-                onClick={async () => {
-                  await signOut({ redirect: false });
-                  signIn("github");
-                }}
+                onClick={() => signIn("github")}
                 className="h-12 px-6 border border-[#27272A] hover:bg-white/5 hover:border-zinc-500 text-white rounded-none font-mono text-xs uppercase tracking-wider font-bold transition-all inline-flex items-center justify-center gap-2"
               >
                 <Github className="h-4 w-4" /> GitHub
