@@ -27,15 +27,6 @@ export default function LandingPage() {
     }
   }, [status, router]);
 
-  // Don't flash the landing page while checking session
-  if (status === "loading") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0E0E0E]">
-        <div className="w-4 h-4 border-2 border-[#10B981] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
   useEffect(() => {
     const handlePageShow = () => {
       document.body.style.pointerEvents = "";
@@ -70,6 +61,15 @@ export default function LandingPage() {
       window.removeEventListener("pageshow", handlePageShow);
     };
   }, [currentText, isDeleting, currentWordIndex]);
+
+  // Don't flash the landing page while checking session
+  if (status === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0E0E0E]">
+        <div className="w-4 h-4 border-2 border-[#10B981] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-[#0E0E0E] text-white font-sans selection:bg-[#10B981]/30 selection:text-[#10B981]">
