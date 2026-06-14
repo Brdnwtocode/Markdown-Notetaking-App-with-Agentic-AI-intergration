@@ -17,7 +17,7 @@ export default function LandingPage() {
   const [currentText, setCurrentText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register" | null>(null);
-  const { data: session, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
 
   // Redirect authenticated users to /workspace
