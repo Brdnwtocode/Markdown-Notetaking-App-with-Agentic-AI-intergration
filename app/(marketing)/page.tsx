@@ -83,13 +83,13 @@ export default function LandingPage() {
               <Mail className="h-3.5 w-3.5" /> Email
             </button>
             <button
-              onClick={() => signIn("github")}
+              onClick={() => signIn("github", { callbackUrl: "/workspace" })}
               className="border border-[#27272A] text-zinc-300 hover:text-white hover:bg-white/5 hover:border-zinc-500 rounded-none px-4 py-2 font-mono text-[11px] uppercase tracking-wider font-bold transition-all"
             >
               GitHub
             </button>
             <button
-              onClick={() => signIn("google")}
+              onClick={() => signIn("google", { callbackUrl: "/workspace" })}
               className="bg-white text-[#0E0E0E] hover:bg-white/90 rounded-none px-4 py-2 font-mono text-[11px] uppercase tracking-wider font-bold transition-all"
             >
               Google
@@ -227,7 +227,7 @@ export default function LandingPage() {
                 Create Account <ArrowRight className="h-4 w-4" />
               </button>
               <button
-                onClick={() => signIn("github")}
+                onClick={() => signIn("github", { callbackUrl: "/workspace" })}
                 className="h-12 px-6 border border-[#27272A] hover:bg-white/5 hover:border-zinc-500 text-white rounded-none font-mono text-xs uppercase tracking-wider font-bold transition-all inline-flex items-center justify-center gap-2"
               >
                 <Github className="h-4 w-4" /> GitHub
@@ -282,13 +282,13 @@ export default function LandingPage() {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => signIn("github")}
+                onClick={() => signIn("github", { callbackUrl: "/workspace" })}
                 className="flex-1 h-10 border border-[#27272A] hover:bg-white/5 hover:border-zinc-500 text-zinc-300 rounded-none font-mono text-[10px] uppercase tracking-wider font-bold transition-all flex items-center justify-center gap-2"
               >
                 <Github className="h-4 w-4" /> GitHub
               </button>
               <button
-                onClick={() => signIn("google")}
+                onClick={() => signIn("google", { callbackUrl: "/workspace" })}
                 className="flex-1 h-10 bg-white hover:bg-white/90 text-[#0E0E0E] rounded-none font-mono text-[10px] uppercase tracking-wider font-bold transition-all"
               >
                 Google
