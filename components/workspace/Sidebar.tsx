@@ -23,7 +23,7 @@ import SchemaBuilder, {
 } from "@/components/workspace/SchemaBuilder";
 import axios from "axios";
 import { apiJson } from "@/lib/api";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import { 
   Plus, LogOut, Database, PanelLeftOpen, PanelLeftClose, 
   FileText, Table2, Search, ArrowUpAZ, ArrowDownAZ, 
@@ -33,6 +33,7 @@ import {
 import { TASKS_TAB_ID, CALENDAR_TAB_ID } from "@/lib/constants";
 import { useDrag, useDrop } from "react-dnd";
 import { Folder as FolderType } from "@/lib/slices/foldersSlice";
+import SessionStopwatch from "@/components/workspace/SessionStopwatch";
 import { Note } from "@/lib/slices/notesSlice";
 import { Stack } from "@/lib/slices/stacksSlice";
 
@@ -321,7 +322,7 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
             <Plus className="h-3.5 w-3.5" />
           </button>
           <button
-            title="New Stack"
+            title="New Stack — Structured table with typed columns"
             onClick={(e) => {
               e.stopPropagation();
               actions.setStackTargetFolderId(node.id);
@@ -764,7 +765,7 @@ export default function Sidebar() {
           className="h-10 w-10 rounded-none hover:bg-white/5"
           title="New Note"
         >
-          <Plus className="h-5 w-5 text-[#A1A1AA]" />
+          <FileText className="h-5 w-5 text-[#A1A1AA]" />
         </Button>
         <Button
           size="icon"
@@ -774,7 +775,7 @@ export default function Sidebar() {
             setShowStackDialog(true);
           }}
           className="h-10 w-10 rounded-none hover:bg-white/5"
-          title="New Stack"
+          title="New Stack — Create a structured table (spreadsheet-like) with typed columns"
         >
           <Database className="h-5 w-5 text-[#A1A1AA]" />
         </Button>
@@ -828,10 +829,10 @@ export default function Sidebar() {
           size="icon"
           variant="ghost"
           onClick={() => signOut({ redirectTo: "/" })}
-          className="h-10 w-10 rounded-none hover:bg-white/5"
+          className="h-10 w-10 rounded-none hover:bg-red-500/10 group"
           title="Sign Out"
         >
-          <LogOut className="h-5 w-5 text-[#A1A1AA]" />
+          <LogOut className="h-5 w-5 text-zinc-500 group-hover:text-red-400 transition-colors" />
         </Button>
       </div>
 
@@ -911,10 +912,10 @@ export default function Sidebar() {
           <div className="p-3 border-t border-[#27272A] bg-[#0E0E0E] flex items-center justify-between text-xs font-mono text-[#A1A1AA] tracking-tight uppercase select-none">
             <div className="flex items-center gap-1.5">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>
+                <span className="absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-40"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
               </span>
-              <span>Flow Active</span>
+              <SessionStopwatch />
             </div>
             <div>
               Sync: {syncState === "SAVING" ? "99%" : syncState === "ERROR" ? "ERR" : "100%"}
@@ -975,7 +976,7 @@ export default function Sidebar() {
 
       {/* Stack Creation Dialog */}
       <Dialog open={showStackDialog} onOpenChange={setShowStackDialog}>
-        <DialogContent className="max-w-4xl bg-[#0E0E0E] border-[#27272A] p-0 text-white overflow-hidden rounded-none">
+        <DialogContent className="max-w-5xl bg-[#0E0E0E] border-[#27272A] p-0 text-white overflow-hidden rounded-none">
           <DialogTitle className="sr-only">Create New Stack</DialogTitle>
           <SchemaBuilder
             onConfirm={handleCreateStack}

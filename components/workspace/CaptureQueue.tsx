@@ -22,7 +22,7 @@ import {
   Circle, CheckCircle2, Loader2, FileAudio,
   Trash2, Upload, Save, Pencil, Check, X, Play,
 } from "lucide-react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 // ─── Accepted audio types ─────────────────────────────────────────────────
 const ACCEPTED_EXTENSIONS = [

@@ -1,5 +1,5 @@
 import { StateCreator } from "zustand";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import { RootStore } from "@/lib/store";
 import { apiJson } from "@/lib/api";
 

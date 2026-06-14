@@ -14,7 +14,7 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

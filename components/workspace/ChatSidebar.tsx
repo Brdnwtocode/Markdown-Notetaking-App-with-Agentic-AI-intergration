@@ -10,7 +10,7 @@ import { buildVoiceFormData, getFormDataContext } from "@/lib/voice/buildFormDat
 import { handleResponseActions } from "@/lib/voice/handleResponseActions";
 import ReactMarkdown from "react-markdown";
 import { apiClient } from "@/lib/httpClient";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import { useDeepgramSTT } from "@/lib/hooks/useDeepgramSTT";
 
 /** Format a Date for display in chat */

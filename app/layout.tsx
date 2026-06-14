@@ -29,7 +29,7 @@ export default function RootLayout({
       <body className="font-sans">
         <AuthSessionProvider>
           {children}
-          <Toaster position="bottom-right" />
+          <Toaster position="bottom-right" toastOptions={{ duration: 6000 }} />
         </AuthSessionProvider>
       </body>
     </html>

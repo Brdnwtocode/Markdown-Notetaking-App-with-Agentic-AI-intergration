@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Download, Eye } from "lucide-react";
 import { useWorkspaceStore } from "@/lib/store";
 import axios from "axios";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 interface DynamicLayoutProps {
   children: React.ReactNode;

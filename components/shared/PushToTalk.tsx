@@ -18,7 +18,7 @@ import { packContext } from "@/lib/voice/contextHelpers";
 import { buildVoiceFormData, getFormDataContext } from "@/lib/voice/buildFormData";
 import { handleResponseActions } from "@/lib/voice/handleResponseActions";
 import { apiClient } from "@/lib/httpClient";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 export default function PushToTalk() {
   const store = useWorkspaceStore();

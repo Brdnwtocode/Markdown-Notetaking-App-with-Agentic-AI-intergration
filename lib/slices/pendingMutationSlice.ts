@@ -1,6 +1,6 @@
 import { StateCreator } from "zustand";
 import { RootStore } from "@/lib/store";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import { apiClient } from "@/lib/httpClient";
 import { isAxiosError } from "axios";
 import type { NoteDiff } from "@/types/voice";

@@ -14,7 +14,7 @@
 "use client";
 
 import { useRef, useState, useCallback } from "react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import { getSessionId } from "@/lib/session";
 
 // ─── Types ────────────────────────────────────────────────────────────────────

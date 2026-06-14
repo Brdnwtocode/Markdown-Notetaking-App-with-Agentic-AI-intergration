@@ -22,7 +22,7 @@ import {
   Play, Pause, Square, Mic, SkipBack, SkipForward,
   Scissors, Volume2, Loader2, Clock, Zap, Save,
 } from "lucide-react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 export default function RecordsWorkstation() {
   const store = useWorkspaceStore();

@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Code, Mic, Users, Edit2, Link2, EyeOff } from "lucide-react";
+
 import type { CalendarEvent } from "@/lib/slices/calendarSlice";
 
 const EventFormSchema = z.object({
@@ -100,11 +100,6 @@ export default function EventDialog({
   };
 
   const { anchor: selectedAnchor, priority: selectedPriority } = getDerivedState(eventColor);
-
-  const handleAnchorClick = (anchorId: string) => {
-    const nextColor = mapAnchorAndPriorityToColor(anchorId, selectedPriority);
-    setValue("color", nextColor);
-  };
 
   const handlePriorityClick = (priorityState: "LOW" | "CRITICAL") => {
     const nextColor = mapAnchorAndPriorityToColor(selectedAnchor, priorityState);
@@ -241,7 +236,7 @@ export default function EventDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg bg-[#131313] border border-[#27272A] p-6 text-white overflow-hidden rounded-none shadow-2xl">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-[#131313] border border-[#27272A] p-6 text-white rounded-none shadow-2xl">
         <DialogTitle className="sr-only">{event ? "Edit Event" : "New Event"}</DialogTitle>
         
         {/* Header */}
@@ -387,71 +382,36 @@ export default function EventDialog({
             )}
           </div>
 
-          {/* Visual Anchor and Priority */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Visual Anchor Buttons */}
-            <div className="space-y-1.5">
+          {/* Priority State */}
+          <div className="space-y-1.5">
+            <div className="flex justify-between items-center">
               <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-technical">
-                Visual Anchor
+                Priority State
               </label>
-              <div className="flex border border-[#27272A] bg-[#0E0E0E] p-1 gap-1 w-max">
-                {[
-                  { id: "code", icon: Code },
-                  { id: "mic", icon: Mic },
-                  { id: "users", icon: Users },
-                  { id: "edit", icon: Edit2 },
-                ].map((anchor) => {
-                  const IconComp = anchor.icon;
-                  const isActive = selectedAnchor === anchor.id;
-                  return (
-                    <button
-                      type="button"
-                      key={anchor.id}
-                      onClick={() => handleAnchorClick(anchor.id)}
-                      className={`h-8 w-8 flex items-center justify-center border transition-all ${
-                        isActive
-                          ? "bg-[#10B981]/10 border-[#10B981] text-[#10B981]"
-                          : "border-transparent text-zinc-500 hover:text-white"
-                      }`}
-                    >
-                      <IconComp className="h-4 w-4" />
-                    </button>
-                  );
-                })}
-              </div>
             </div>
-
-            {/* Priority State */}
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-technical">
-                  Priority State
-                </label>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => handlePriorityClick("LOW")}
-                  className={`flex-1 h-9 font-technical text-[10px] font-bold border transition-all ${
-                    selectedPriority === "LOW"
-                      ? "border-zinc-500 text-zinc-300 bg-white/5"
-                      : "border-[#27272A] text-zinc-500 hover:text-zinc-300"
-                  }`}
-                >
-                  LOW
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePriorityClick("CRITICAL")}
-                  className={`flex-1 h-9 font-technical text-[10px] font-bold border transition-all ${
-                    selectedPriority === "CRITICAL"
-                      ? "border-[#EF4444] text-[#EF4444] bg-[#EF4444]/10"
-                      : "border-[#27272A] text-zinc-500 hover:text-[#EF4444]"
-                  }`}
-                >
-                  CRITICAL
-                </button>
-              </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handlePriorityClick("LOW")}
+                className={`flex-1 h-9 font-technical text-[10px] font-bold border transition-all ${
+                  selectedPriority === "LOW"
+                    ? "border-zinc-500 text-zinc-300 bg-white/5"
+                    : "border-[#27272A] text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                LOW
+              </button>
+              <button
+                type="button"
+                onClick={() => handlePriorityClick("CRITICAL")}
+                className={`flex-1 h-9 font-technical text-[10px] font-bold border transition-all ${
+                  selectedPriority === "CRITICAL"
+                    ? "border-[#EF4444] text-[#EF4444] bg-[#EF4444]/10"
+                    : "border-[#27272A] text-zinc-500 hover:text-[#EF4444]"
+                }`}
+              >
+                CRITICAL
+              </button>
             </div>
           </div>
 
@@ -481,32 +441,6 @@ export default function EventDialog({
             />
           </div>
 
-          {/* Linked Context Block */}
-          <div className="border border-[#27272A] bg-[#0E0E0E] p-3 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-16 bg-[#131313] border border-[#27272A] flex items-center justify-center text-zinc-500">
-                <Link2 className="h-4 w-4" />
-              </div>
-              <div className="space-y-0.5">
-                <div className="text-[9px] text-[#10B981] font-technical font-bold uppercase tracking-wider">
-                  Linked Context
-                </div>
-                <div className="text-xs font-semibold text-white font-technical truncate max-w-[200px]">
-                  system_architecture_draft_v3.png
-                </div>
-                <div className="text-[9px] text-zinc-500 font-technical">
-                  Added from &apos;Stacks&apos; • 2.4MB
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              className="h-8 w-8 border border-[#27272A] flex items-center justify-center text-zinc-500 hover:text-white hover:border-zinc-500"
-            >
-              <EyeOff className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
           {/* Buttons */}
           <div className="flex justify-between items-center pt-2 border-t border-[#27272A]">
             {event && onDelete && (
@@ -532,7 +466,7 @@ export default function EventDialog({
                 type="submit"
                 className="h-10 bg-white hover:bg-white/95 text-[#0E0E0E] rounded-none text-xs uppercase tracking-wider font-bold"
               >
-                {event ? "Initiate Flow" : "Initiate Flow"}
+                CONFIRM
               </Button>
             </div>
           </div>

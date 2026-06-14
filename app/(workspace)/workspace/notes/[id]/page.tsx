@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import LiveEditor from "@/components/workspace/LiveEditor";
+import { MilkdownProvider } from "@milkdown/react";
+import LiveEditor, { MarkdownToolbar } from "@/components/workspace/LiveEditor";
 import TextareaAutosize from "react-textarea-autosize";
 import { Button } from "@/components/ui/button";
 import { useWorkspaceStore } from "@/lib/store";
@@ -14,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import axios from "axios";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 function RawMarkdownEditor({ content, noteId }: { content: string; noteId: string }) {
   const [text, setText] = useState(content);
@@ -54,8 +55,31 @@ export default function NotePage() {
   const [note, setNote] = useState<any>(null);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
-  const { setCurrentNoteId, noteCache, upsertNoteCache, optimisticPatchNote, optimisticDeleteNote, openTab, isRawMarkdownView, toggleRawMarkdownView } =
+  const { setCurrentNoteId, noteCache, upsertNoteCache, optimisticPatchNote, optimisticDeleteNote, openTab, isRawMarkdownView, toggleRawMarkdownView, saveTabScrollPosition, getTabScrollPosition } =
     useWorkspaceStore();
+
+  // ── Scroll position persistence ──────────────────────────────────
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollTimer = useRef<NodeJS.Timeout>();
+
+  // Restore saved scroll position when this note tab becomes active
+  useEffect(() => {
+    const savedPos = getTabScrollPosition(noteId);
+    if (savedPos > 0 && scrollRef.current) {
+      scrollRef.current.scrollTop = savedPos;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteId]);
+
+  // Save scroll position on scroll (debounced 150ms)
+  const handleScroll = useCallback(() => {
+    if (scrollTimer.current) clearTimeout(scrollTimer.current);
+    scrollTimer.current = setTimeout(() => {
+      if (scrollRef.current) {
+        saveTabScrollPosition(noteId, scrollRef.current.scrollTop);
+      }
+    }, 150);
+  }, [noteId, saveTabScrollPosition]);
 
   // ── Keep local note state in sync with Zustand noteCache ─────────
   // When confirmMutation (or any other flow) updates noteCache,
@@ -152,7 +176,10 @@ export default function NotePage() {
   }
 
   return (
-    <div className="h-full w-full overflow-y-auto relative scrollbar scrollbar-w-2 scrollbar-thumb-zinc-700/50 hover:scrollbar-thumb-zinc-600 scrollbar-track-transparent bg-[#1e1e1e]">
+    <div
+      ref={scrollRef}
+      onScroll={handleScroll}
+      className="h-full w-full overflow-y-auto relative scrollbar scrollbar-w-2 scrollbar-thumb-zinc-700/50 hover:scrollbar-thumb-zinc-600 scrollbar-track-transparent bg-[#1e1e1e]">
       <div className="absolute top-4 right-4 z-10">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -177,7 +204,12 @@ export default function NotePage() {
         </DropdownMenu>
       </div>
 
-      <div className="max-w-4xl mx-auto px-16 py-20">
+      <MilkdownProvider>
+        {/* MarkdownToolbar rendered above the title; uses useInstance()
+            which resolves via MilkdownProvider context shared with LiveEditor below */}
+        <MarkdownToolbar />
+
+        <div className="max-w-4xl mx-auto px-16 py-20">
         <div className="space-y-8">
           <TextareaAutosize
             value={title}
@@ -195,6 +227,7 @@ export default function NotePage() {
           </div>
         </div>
       </div>
+      </MilkdownProvider>
     </div>
   );
 }

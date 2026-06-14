@@ -11,7 +11,6 @@ import {
   Type,
   Hash,
   Calendar as CalendarIcon,
-  CheckSquare,
   Tag,
   ArrowUp,
   ArrowDown,
@@ -19,6 +18,10 @@ import {
   Layers,
   Filter,
   Copy,
+  Square,
+  CheckSquare,
+  Info,
+  X,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,7 +42,7 @@ import { Stack, StackColumn, StackRow } from "@/lib/store";
 import { useWorkspaceStore } from "@/lib/store";
 import { useRouter } from "next/navigation";
 import axios from "axios";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 interface StackTableProps {
   stackId: string;
@@ -96,6 +99,10 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
   const resizeStartWidthRef = useRef(0);
   const dragColumnRef = useRef<string | null>(null);
   const saveInProgressRef = useRef(false);
+  
+  // Multi-select state
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [showHelpBanner, setShowHelpBanner] = useState(true);
   
   const { notes, pendingMutation, setFocusedRow, setFocusedColumn, updateStack } = useWorkspaceStore();
   const router = useRouter();
@@ -477,6 +484,56 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
     toast.success("Column copied to clipboard!");
   };
 
+  // ─── Multi-select helpers ──────────────────────────────────────────
+
+  const allRowIds = useMemo(() => {
+    return Object.values(processedData).flat().map((r) => r.id);
+  }, [processedData]);
+
+  const toggleSelectRow = (rowId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(rowId)) {
+        next.delete(rowId);
+      } else {
+        next.add(rowId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedRowIds.size === allRowIds.length && allRowIds.length > 0) {
+      setSelectedRowIds(new Set());
+    } else {
+      setSelectedRowIds(new Set(allRowIds));
+    }
+  };
+
+  const bulkDeleteSelected = () => {
+    if (selectedRowIds.size === 0) return;
+    const newRows = rows.filter((r) => !selectedRowIds.has(r.id));
+    setRows(newRows);
+    syncStackToStore(columns, newRows);
+    setSelectedRowIds(new Set());
+    toast.success(`Deleted ${selectedRowIds.size} row(s)`);
+  };
+
+  const bulkCopySelected = () => {
+    if (selectedRowIds.size === 0) return;
+    const selectedRows = rows.filter((r) => selectedRowIds.has(r.id));
+    const headers = columns.map((col) => col.name).join("\t");
+    const csvRows = selectedRows.map((row) =>
+      columns.map((col) => row.data[col.id] ?? "").join("\t")
+    );
+    const text = [headers, ...csvRows].join("\n");
+    navigator.clipboard.writeText(text);
+    toast.success(`Copied ${selectedRowIds.size} row(s)`);
+  };
+
+  const clearSelection = () => setSelectedRowIds(new Set());
+
   const openFormulaDialog = (columnId: string) => {
     const existingFormula = formulas.find(f => f.columnId === columnId);
     if (existingFormula) {
@@ -503,6 +560,69 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
 
   return (
     <div className="flex flex-col h-full bg-[#0E0E0E]">
+      {/* Help Banner — explains what a Stack is */}
+      {showHelpBanner && (
+        <div className="px-6 py-3 border-b border-[#10B981]/20 bg-[#10B981]/5 flex items-start gap-3">
+          <Info className="h-4 w-4 text-[#10B981] mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-white font-medium">What is a Stack?</p>
+            <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
+              A <strong className="text-zinc-200">Stack</strong> is a structured table — like a spreadsheet. Each <strong className="text-zinc-200">column</strong> has a type (text, number, date, etc.) and each <strong className="text-zinc-200">row</strong> is a record.
+              <br />
+              <span className="text-[#10B981]">▸ Click</span> a row to focus it for AI context.{" "}
+              <span className="text-[#10B981]">▸ Check</span> the box to multi-select rows for bulk actions.{" "}
+              <span className="text-[#10B981]">▸ Drag</span> columns to reorder.{" "}
+              <span className="text-[#10B981]">▸ Resize</span> columns by dragging the right edge.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowHelpBanner(false)}
+            className="p-1 text-zinc-500 hover:text-white flex-shrink-0"
+            title="Dismiss"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Bulk Action Bar — visible when rows are selected */}
+      {selectedRowIds.size > 0 && (
+        <div className="px-6 py-2 border-b border-[#10B981]/30 bg-[#10B981]/10 flex items-center gap-3">
+          <span className="text-sm text-[#10B981] font-technical font-medium">
+            {selectedRowIds.size} row{selectedRowIds.size > 1 ? "s" : ""} selected
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              onClick={bulkCopySelected}
+              variant="secondary"
+              size="sm"
+              className="text-white hover:border-[#10B981] text-xs h-7"
+              title="Copy selected rows as TSV"
+            >
+              <Copy className="h-3.5 w-3.5 mr-1 text-[#10B981]" />
+              Copy Selected
+            </Button>
+            <Button
+              onClick={bulkDeleteSelected}
+              variant="secondary"
+              size="sm"
+              className="text-white hover:border-[#EF4444] hover:text-[#EF4444] text-xs h-7"
+              title="Delete selected rows"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1 text-[#EF4444]" />
+              Delete Selected
+            </Button>
+          </div>
+          <button
+            onClick={clearSelection}
+            className="ml-auto text-xs text-zinc-400 hover:text-white"
+            title="Clear selection"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {/* Toolbar */}
       <div className="flex items-center justify-between px-6 py-3 border-b border-[#27272A] bg-[#131313]">
         <div className="flex items-center gap-4">
@@ -511,6 +631,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
             variant="secondary"
             size="sm"
             className="text-white hover:border-[#10B981]"
+            title="Add a new empty row to the stack"
           >
             <Plus className="h-4 w-4 mr-1 text-[#10B981]" />
             New row
@@ -520,6 +641,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
             variant="secondary"
             size="sm"
             className="text-white hover:border-[#10B981]"
+            title={showGridLines ? "Hide cell borders" : "Show cell borders"}
           >
             <Grid3X3 className="h-4 w-4 mr-1 text-[#10B981]" />
             {showGridLines ? "Hide Grid" : "Show Grid"}
@@ -530,6 +652,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                 variant="secondary"
                 size="sm"
                 className="text-white hover:border-[#10B981]"
+                title="Group rows by a column's value"
               >
                 <Layers className="h-4 w-4 mr-1 text-[#10B981]" />
                 {groupConfig ? "Ungroup" : "Group"}
@@ -563,10 +686,22 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
             variant="secondary"
             size="sm"
             className="text-white hover:border-[#10B981]"
+            title="Copy entire table as TSV to clipboard"
           >
             <Copy className="h-4 w-4 mr-1 text-[#10B981]" />
             Copy Table
           </Button>
+          {!showHelpBanner && (
+            <Button
+              onClick={() => setShowHelpBanner(true)}
+              variant="ghost"
+              size="sm"
+              className="text-zinc-500 hover:text-white"
+              title="Show stack help"
+            >
+              <Info className="h-4 w-4" />
+            </Button>
+          )}
         </div>
         <div className="flex flex-col items-end gap-0.5">
           {isDirty && (
@@ -575,6 +710,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
               size="sm"
               disabled={isSaving}
               variant="technical"
+              title="Save all changes to the server"
             >
               <Save className="h-3.5 w-3.5 mr-1.5" />
               {isSaving ? "Saving..." : "Save"}
@@ -594,6 +730,24 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-[#27272A] bg-[#131313]">
+              {/* Select-all checkbox column */}
+              <th className="text-center w-10 border-r border-[#27272A]">
+                <button
+                  onClick={toggleSelectAll}
+                  className="p-1 hover:bg-white/5 rounded"
+                  title={selectedRowIds.size === allRowIds.length && allRowIds.length > 0 ? "Deselect all rows" : "Select all rows"}
+                >
+                  {selectedRowIds.size === allRowIds.length && allRowIds.length > 0 ? (
+                    <CheckSquare className="h-4 w-4 text-[#10B981]" />
+                  ) : selectedRowIds.size > 0 ? (
+                    <div className="h-4 w-4 border border-[#10B981] bg-[#10B981]/30 flex items-center justify-center">
+                      <div className="h-1.5 w-1.5 bg-[#10B981]" />
+                    </div>
+                  ) : (
+                    <Square className="h-4 w-4 text-zinc-600" />
+                  )}
+                </button>
+              </th>
               {columns.map((col) => (
                 <th
                   key={col.id}
@@ -789,7 +943,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                 </th>
               ))}
               {/* Add Column Button */}
-              <th className="text-left text-sm w-32 border-r-0">
+              <th className="text-left text-sm w-32 border-r-0" colSpan={2}>
                 <div className="px-3 py-2">
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
@@ -830,6 +984,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
             {/* Filter inputs row */}
             {filters.length > 0 && (
               <tr className="border-b border-[#27272A] bg-[#131313]">
+                <th className="w-10 border-r border-[#27272A]" />
                 {columns.map((col) => {
                   const colFilters = filters.filter(f => f.columnId === col.id);
                   return (
@@ -875,7 +1030,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                 {groupConfig && groupKey && (
                   <tr className="bg-[#131313]">
                     <td
-                      colSpan={columns.length + 1}
+                      colSpan={columns.length + 2}
                       className="px-3 py-2 text-sm font-semibold text-slate-300 font-technical uppercase"
                     >
                       {groupKey} ({groupRows.length})
@@ -887,11 +1042,27 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                     key={row.id}
                     className={`${showGridLines ? "border-b border-[#27272A]" : ""} hover:bg-[#1A1A1A] group transition-colors duration-100 ${
                       row.id === useWorkspaceStore.getState().focusedRowId ? "bg-white/5" : ""
-                    }`}
+                    } ${selectedRowIds.has(row.id) ? "bg-[#10B981]/5 ring-1 ring-[#10B981]/30" : ""}`}
                     onClick={() => {
                       setFocusedRow(row.id);
                     }}
                   >
+                    {/* Checkbox column for multi-select */}
+                    <td
+                      className={`text-center w-10 ${showGridLines ? "border-r border-[#27272A]" : ""}`}
+                      onClick={(e) => toggleSelectRow(row.id, e)}
+                    >
+                      <button
+                        className="p-0.5 hover:bg-white/5 rounded"
+                        title={selectedRowIds.has(row.id) ? "Deselect this row" : "Select this row"}
+                      >
+                        {selectedRowIds.has(row.id) ? (
+                          <CheckSquare className="h-4 w-4 text-[#10B981]" />
+                        ) : (
+                          <Square className="h-4 w-4 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        )}
+                      </button>
+                    </td>
                     {columns.map((col) => (
                       <td
                         key={`${row.id}-${col.id}`}
@@ -1000,6 +1171,12 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                        {/* AI Confirmation Gate Row */}
             {pendingMutation?.type === "add_stack_row" && pendingMutation.stackId === stackId && (
               <tr className="bg-[#10B9810D] border-y border-[#27272A] group relative">
+                <td className="w-10 text-center border-r border-[#27272A]">
+                  <span className="relative flex h-2 w-2 mx-auto">
+                    <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
+                  </span>
+                </td>
                 {columns.map((col, index) => (
                   <td
                     key={`pending-${col.id}`}
@@ -1029,7 +1206,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
             {/* AI Confirmation Gate for Bulk Update */}
             {pendingMutation?.type === "bulk_update_stack" && pendingMutation.stackId === stackId && (
               <tr className="bg-[#10B9810D] border-y border-[#27272A] group relative">
-                <td colSpan={columns.length + 1} className="px-3 py-3 border-l-4 border-l-[#10B981]">
+                <td colSpan={columns.length + 2} className="px-3 py-3 border-l-4 border-l-[#10B981]">
                   <div className="flex items-center gap-2 font-mono text-xs text-[#10B981] uppercase tracking-wider">
                     <span className="relative flex h-2 w-2">
                       <span className="animate-pulse absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-75"></span>

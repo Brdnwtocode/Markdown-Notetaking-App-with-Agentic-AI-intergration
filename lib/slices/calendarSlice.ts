@@ -1,7 +1,7 @@
 import { StateCreator } from "zustand";
 import { RootStore } from "@/lib/store";
 import { apiJson } from "@/lib/api";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 export interface CalendarEvent {
     id: string; userId: string; title: string; notes: string;

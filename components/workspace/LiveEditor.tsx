@@ -1,6 +1,6 @@
 "use client";
 
-import { Milkdown, MilkdownProvider, useEditor, useInstance } from '@milkdown/react';
+import { Milkdown, useEditor, useInstance } from '@milkdown/react';
 import { Editor, rootCtx, defaultValueCtx, editorViewCtx } from '@milkdown/core';
 import { commonmark } from '@milkdown/preset-commonmark';
 import { gfm } from '@milkdown/preset-gfm';
@@ -90,17 +90,24 @@ interface LiveEditorProps {
 //    Milkdown commands (wrapInHeadingCommand, etc.) read from state.selection
 //    which ProseMirror preserves even across blur events, but keeping focus
 //    is safer and avoids visual flicker.
+//
+//  EXPORTED: This component is imported by the note page and rendered above
+//    the title, outside LiveEditor's DOM tree. It must be inside a
+//    <MilkdownProvider> (provided by the note page) for useInstance() to work.
 // ═══════════════════════════════════════════════════════════════════════════
 
 const btnBase =
-  "p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-[#10B981]/50";
-const divider = <div className="w-px h-5 bg-[#27272A] mx-1" />;
+  "p-1 hover:bg-white/5 rounded text-slate-500 hover:text-slate-300 transition-colors focus:outline-none";
+const divider = <div className="w-px h-4 bg-[#27272A]/30 mx-0.5" />;
 
-const MarkdownToolbar = () => {
+export function MarkdownToolbar() {
   // ── useInstance(): [loading, getEditor] tuple ────────────────────
   // The editor ref is populated when EditorComponent's useEditor()
   // finishes creating the Milkdown instance. On first render get()
   // may return undefined — all handlers guard against this.
+  //
+  // IMPORTANT: This component MUST be rendered inside a <MilkdownProvider>
+  // (provided by the note page) for useInstance() to resolve.
   const [, get] = useInstance();
 
   // ── exec(cmdKey, ...args) — central command dispatcher ───────────
@@ -178,7 +185,7 @@ const MarkdownToolbar = () => {
   };
 
   return (
-    <div className="sticky top-0 z-20 flex items-center gap-0.5 bg-[#0E0E0E] border-b border-[#27272A] px-2 py-1 overflow-x-auto select-none">
+    <div className="sticky top-0 z-20 flex items-center gap-0 bg-transparent border-b border-[#27272A]/20 px-2 py-0.5 overflow-x-auto select-none">
       {/* ── Headings ── */}
       <button
         onMouseDown={(e) => {
@@ -621,16 +628,15 @@ const DiffOverlay = ({ originalContent, newContent }: DiffOverlayProps) => {
 //  STRUCTURE (important for understanding z-index / sticky / dimming):
 //    <div.prose relative>           ← scroll container, positioning context
 //      {DiffOverlay absolute z-10}  ← shown during pending AI mutations
-//      <MilkdownProvider>           ← React context for useInstance/useEditor
-//        <MarkdownToolbar />        ← sticky top-0 z-20, OUTSIDE dimmed area
-//        <div dimmed?>              ← only wraps EditorComponent
-//          <EditorComponent>        ← Milkdown editor + cursor tracking
-//        </div>
-//      </MilkdownProvider>
+//      <div dimmed?>                ← only wraps EditorComponent
+//        <EditorComponent>          ← Milkdown editor + cursor tracking
+//      </div>
 //    </div>
 //
-//  The toolbar is intentionally OUTSIDE the opacity/pointer-events wrapper
-//  so it stays interactive during AI suggestion review (DiffOverlay).
+//  NOTE: MarkdownToolbar + MilkdownProvider are now rendered in the
+//  note page (app/(workspace)/workspace/notes/[id]/page.tsx) so the
+//  toolbar sits ABOVE the title. The provider wraps both toolbar and
+//  LiveEditor there.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function LiveEditor({ noteId, content }: LiveEditorProps) {
@@ -664,16 +670,11 @@ export default function LiveEditor({ noteId, content }: LiveEditorProps) {
         />
       )}
 
-      <MilkdownProvider>
-        {/* Sticky toolbar stays interactive even during AI suggestion review */}
-        <MarkdownToolbar />
-
-        <div className={isPending ? "opacity-30 pointer-events-none select-none" : ""}>
-          {/* Key-based remounting ensures editor always picks up latest content via defaultValueCtx.
-              Cursor position is tracked via DOM events + Zustand store, so it survives remounts. */}
-          <EditorComponent key={`active-${noteId}`} content={content} noteId={noteId} />
-        </div>
-      </MilkdownProvider>
+      <div className={isPending ? "opacity-30 pointer-events-none select-none" : ""}>
+        {/* Key-based remounting ensures editor always picks up latest content via defaultValueCtx.
+            Cursor position is tracked via DOM events + Zustand store, so it survives remounts. */}
+        <EditorComponent key={`active-${noteId}`} content={content} noteId={noteId} />
+      </div>
     </div>
   );
 }

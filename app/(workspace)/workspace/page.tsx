@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useWorkspaceStore } from "@/lib/store";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import { SecondaryLogo } from "@/components/shared/BrandAssets";
 import { Plus, MessageSquare, Terminal } from "lucide-react";
 

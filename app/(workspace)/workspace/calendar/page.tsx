@@ -8,7 +8,7 @@ import { useDebouncedCallback } from "use-debounce";
 import { useWorkspaceStore } from "@/lib/store";
 import { CALENDAR_TAB_ID } from "@/lib/constants";
 import { calendarLocalizer } from "@/lib/calendarLocalizer";
-import { toast } from "react-hot-toast";
+import { toast } from "@/lib/toast";
 import EventDialog from "@/components/workspace/EventDialog";
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, startOfDay } from "date-fns";
 import type { CalendarEvent } from "@/lib/slices/calendarSlice";
@@ -103,6 +103,12 @@ export default function CalendarPage() {
   );
 
   const handleSelectSlot = (slot: SlotInfo) => {
+    // If dialog is already open, close it instead of switching to a new date
+    if (dialogOpen) {
+      setDialogOpen(false);
+      setEditingEvent(null);
+      return;
+    }
     setEditingEvent(null);
     if (currentView === "month") {
       setNewEventFromMonthSlot(true);
@@ -131,6 +137,12 @@ export default function CalendarPage() {
   };
 
   const handleSelectEvent = (event: RBCEvent) => {
+    // If dialog is already open, close it instead of switching to a different event
+    if (dialogOpen) {
+      setDialogOpen(false);
+      setEditingEvent(null);
+      return;
+    }
     const cal = (event as CalendarRbcEvent).resource;
     setEditingEvent(cal);
     setNewEventFromMonthSlot(false);

@@ -1,7 +1,7 @@
 import { StateCreator } from "zustand";
 import { RootStore } from "@/lib/store";
 import { apiJson } from "@/lib/api";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 export type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE";
 export type TaskPriority = "LOW" | "MEDIUM" | "HIGH";

@@ -13,7 +13,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useWorkspaceStore } from "@/lib/store";
 import { useContinuousSTT } from "@/lib/hooks/useContinuousSTT";
 import { storeBlob } from "@/components/workspace/CaptureQueue";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 export default function BackgroundRecorder() {
   const isRecording = useWorkspaceStore((s) => s.isRecording);

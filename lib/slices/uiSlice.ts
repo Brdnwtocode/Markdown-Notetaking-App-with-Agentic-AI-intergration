@@ -44,6 +44,11 @@ export interface UiSlice {
   isRawMarkdownView: boolean;
   setIsRawMarkdownView: (isRaw: boolean) => void;
   toggleRawMarkdownView: () => void;
+
+  /** Per-tab scroll position persistence (tabId → scrollTop in px) */
+  tabScrollPositions: Record<string, number>;
+  saveTabScrollPosition: (tabId: string, scrollTop: number) => void;
+  getTabScrollPosition: (tabId: string) => number;
 }
 
 export const createUiSlice: StateCreator<RootStore, [], [], UiSlice> = (set, get) => ({
@@ -142,6 +147,18 @@ export const createUiSlice: StateCreator<RootStore, [], [], UiSlice> = (set, get
   isRawMarkdownView: false,
   setIsRawMarkdownView: (is) => set({ isRawMarkdownView: is }),
   toggleRawMarkdownView: () => set((state) => ({ isRawMarkdownView: !state.isRawMarkdownView })),
+
+  // Per-tab scroll position persistence
+  tabScrollPositions: {},
+  saveTabScrollPosition: (tabId, scrollTop) => {
+    set((state) => ({
+      tabScrollPositions: { ...state.tabScrollPositions, [tabId]: scrollTop },
+    }));
+  },
+  getTabScrollPosition: (tabId) => {
+    return get().tabScrollPositions[tabId] ?? 0;
+  },
+
   // Current user
   currentUserId: null,
   setCurrentUserId: (id) => set({ currentUserId: id }),

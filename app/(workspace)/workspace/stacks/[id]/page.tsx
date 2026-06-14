@@ -6,7 +6,7 @@ import StackTable from "@/components/workspace/StackTable";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useWorkspaceStore } from "@/lib/store";
-import { Trash2, Download, MoreVertical } from "lucide-react";
+import { Trash2, Download, MoreVertical, Info, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import axios from "axios";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 export default function StackPage() {
   const params = useParams();
@@ -23,6 +23,7 @@ export default function StackPage() {
   const [stack, setStack] = useState<any>(null);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(true);
+  const [showStackInfo, setShowStackInfo] = useState(false);
   const { setCurrentStackId, stacks, optimisticRenameStack, openTab, updateStack } = useWorkspaceStore();
 
   useEffect(() => {
@@ -132,6 +133,25 @@ export default function StackPage() {
 
   return (
     <div className="h-full flex flex-col bg-[#1e1e1e]">
+      {/* Stack Info Banner */}
+      {showStackInfo && (
+        <div className="px-4 py-3 border-b border-[#10B981]/20 bg-[#10B981]/5 flex items-start gap-3">
+          <Info className="h-4 w-4 text-[#10B981] mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-white font-medium">About Stacks</p>
+            <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
+              A <strong className="text-zinc-200">Stack</strong> is a structured table where each column has a defined data type (text, number, date, checkbox, etc.). Use stacks to organize structured data like research results, task lists, or inventories.
+              <br />
+              <span className="text-[#10B981]">▸ Click any row</span> to focus it — the AI agent sees focused rows as context.{" "}
+              <span className="text-[#10B981]">▸ Check the box</span> next to a row to multi-select for bulk copy/delete.{" "}
+              <span className="text-[#10B981]">▸ Right-click</span> a column header for sort, filter, and type options.
+            </p>
+          </div>
+          <button onClick={() => setShowStackInfo(false)} className="p-1 text-zinc-500 hover:text-white flex-shrink-0">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
       <div className="border-b border-zinc-700/30 p-4 flex items-center justify-between gap-4 bg-[#262626]">
         <div className="flex-1">
           <Input
@@ -144,10 +164,20 @@ export default function StackPage() {
             {stack.columns.length} columns • {stack.rows.length} rows
           </p>
         </div>
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/5">
-              <MoreVertical className="h-4 w-4 text-slate-400" />
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setShowStackInfo(!showStackInfo)}
+            className="h-8 w-8 hover:bg-white/5"
+            title="What is a Stack?"
+          >
+            <Info className="h-4 w-4 text-slate-400" />
+          </Button>
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/5">
+                <MoreVertical className="h-4 w-4 text-slate-400" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent 
@@ -167,6 +197,7 @@ export default function StackPage() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+      </div>
       </div>
 
       <StackTable

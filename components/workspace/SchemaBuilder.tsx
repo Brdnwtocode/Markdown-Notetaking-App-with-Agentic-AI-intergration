@@ -2,8 +2,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Trash2, X, ChevronDown, Check } from "lucide-react";
-import toast from "react-hot-toast";
+import { Plus, Trash2, X, ChevronDown, Check, Info, BookOpen, Lightbulb } from "lucide-react";
+import { toast } from "@/lib/toast";
 
 export interface ColumnDefinition {
   name: string;
@@ -91,8 +91,7 @@ export default function SchemaBuilder({
   const [activeDropdownIndex, setActiveDropdownIndex] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const [indexForSearch, setIndexForSearch] = useState(true);
-  const [publicApiAccess, setPublicApiAccess] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -144,61 +143,88 @@ export default function SchemaBuilder({
 
   return (
     <div className="grid grid-cols-12 w-full text-white bg-[#0E0E0E]">
-      {/* Left Column: Editor Schema Details (col-span-8) */}
-      <div className="col-span-8 p-6 flex flex-col justify-between border-r border-[#27272A] relative min-h-[600px]">
-        {/* Header */}
-        <div className="space-y-1 mb-6">
-          <div className="text-[10px] text-[#10B981] font-technical uppercase tracking-wider flex items-center gap-1.5">
-            <span className="bg-[#10B981]/15 px-1.5 py-0.5 border border-[#10B981]/30">CMD + N</span>
-            <span>Stack Creation Workspace</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold uppercase tracking-tight font-technical text-white">
-              Create New Stack
+      {/* ── Left Panel: Schema Definition (col-span-5, 4:6 ratio) ── */}
+      <div className="col-span-5 p-6 flex flex-col border-r border-[#27272A] min-h-[600px]">
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="space-y-0.5">
+            <div className="text-[10px] text-[#10B981] font-technical uppercase tracking-wider flex items-center gap-1.5">
+              <span className="bg-[#10B981]/15 px-1.5 py-0.5 border border-[#10B981]/30">CMD + N</span>
+              <span>Stack Creation</span>
+            </div>
+            <h2 className="text-lg font-bold uppercase tracking-tight font-technical text-white">
+              Define Schema
             </h2>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowInfo(!showInfo)}
+              className={`h-8 w-8 rounded-none ${showInfo ? "bg-[#10B981]/10 text-[#10B981]" : "text-zinc-500 hover:text-white hover:bg-white/5"}`}
+              title="What is a Stack?"
+            >
+              <Info className="h-4 w-4" />
+            </Button>
             <Button
               type="button"
               variant="ghost"
               size="icon"
               onClick={onCancel}
-              className="text-zinc-400 hover:text-white hover:bg-white/5 h-8 w-8 rounded-none absolute right-4 top-4"
+              className="text-zinc-400 hover:text-white hover:bg-white/5 h-8 w-8 rounded-none"
             >
               <X className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        {/* Stack Label & Icon */}
-        <div className="flex gap-4 mb-6">
-          <div className="flex-1 space-y-1.5">
-            <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-technical">
-              Stack Label
-            </label>
-            <Input
-              value={stackName}
-              onChange={(e) => setStackName(e.target.value)}
-              placeholder="e.g., Research_Engine_v1"
-              className="h-10 bg-[#131313] border-[#27272A] text-sm text-white placeholder:text-zinc-600 focus-visible:border-[#10B981] rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
-            />
-          </div>
-          <div className="w-48 space-y-1.5">
-            <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-technical">
-              Icon
-            </label>
-            <div className="h-10 bg-[#131313] border border-[#27272A] flex items-center justify-between px-3 text-sm text-zinc-400 hover:border-zinc-500 cursor-pointer font-technical">
-              <span>• Default_Stack</span>
-              <ChevronDown className="h-4 w-4 text-zinc-500" />
+        {/* Toggleable Onboarding / Info Panel */}
+        {showInfo && (
+          <div className="mb-4 p-4 border border-[#10B981]/20 bg-[#10B981]/5 space-y-3">
+            <div className="flex items-start gap-2">
+              <BookOpen className="h-4 w-4 text-[#10B981] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-white">What is a Stack?</p>
+                <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                  A Stack is a <strong className="text-zinc-200">structured data table</strong> — like a spreadsheet but with strong typing. Each column has a fixed data type and each row is a record.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Lightbulb className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-white">How to define a Stack</p>
+                <ul className="text-xs text-zinc-400 mt-0.5 space-y-0.5 leading-relaxed list-disc list-inside">
+                  <li>Give each <strong className="text-zinc-200">column</strong> a unique name and a data type below</li>
+                  <li>Use <strong className="text-zinc-200">TEXT</strong> for strings, <strong className="text-zinc-200">INT/FLOAT</strong> for numbers, <strong className="text-zinc-200">BOOLEAN</strong> for true/false</li>
+                  <li>Use <strong className="text-zinc-200">DATE</strong> for calendar dates, <strong className="text-zinc-200">SELECT</strong> for tag-like values</li>
+                  <li><strong className="text-zinc-200">FORMULA</strong> computes values from other columns; <strong className="text-zinc-200">RELATION</strong> links to notes</li>
+                </ul>
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Check className="h-4 w-4 text-[#10B981] mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-white">Primary use cases</p>
+                <p className="text-xs text-zinc-400 mt-0.5 leading-relaxed">
+                  Research data tracking • Task inventories • Experiment logs • Structured note companions • AI-populated datasets
+                </p>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Schema Definition Title */}
-        <div className="flex justify-between items-center mb-2">
-          <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-technical">
-            Schema Definition
-          </label>
-          <span className="text-[10px] text-zinc-500 font-technical">
-            {columns.length}/20 PROPERTIES
+        {/* Schema Definition — prominent title */}
+        <div className="flex items-center justify-between mb-2 mt-1">
+          <div className="flex items-center gap-2">
+            <div className="h-5 w-1 bg-[#10B981]" />
+            <label className="text-xs text-[#10B981] uppercase tracking-wider font-technical font-semibold">
+              Schema Definition
+            </label>
+          </div>
+          <span className="text-[10px] text-zinc-500 font-technical tabular-nums">
+            {columns.length}/20
           </span>
         </div>
 
@@ -301,89 +327,131 @@ export default function SchemaBuilder({
         <button
           type="button"
           onClick={addColumn}
-          className="w-full h-11 border border-dashed border-[#27272A] hover:border-[#10B981]/60 text-zinc-500 hover:text-white flex items-center justify-center gap-2 text-xs font-technical uppercase tracking-wider transition-colors mb-6"
+          className="w-full h-11 border border-dashed border-[#27272A] hover:border-[#10B981]/60 text-zinc-500 hover:text-white flex items-center justify-center gap-2 text-xs font-technical uppercase tracking-wider transition-colors mt-auto"
         >
-          <Plus className="h-3.5 w-3.5 text-[#10B981]" /> Add Property block
+          <Plus className="h-3.5 w-3.5 text-[#10B981]" /> Add Column
         </button>
-
-        {/* Search Checkboxes */}
-        <div className="flex gap-6 mt-auto">
-          <label className="flex items-center gap-2 text-xs font-technical text-zinc-400 hover:text-white cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={indexForSearch}
-              onChange={(e) => setIndexForSearch(e.target.checked)}
-              className="accent-[#10B981] h-3.5 w-3.5 border-[#27272A] bg-[#131313] rounded-none focus:ring-0"
-            />
-            INDEX FOR SEARCH
-          </label>
-          <label className="flex items-center gap-2 text-xs font-technical text-zinc-400 hover:text-white cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={publicApiAccess}
-              onChange={(e) => setPublicApiAccess(e.target.checked)}
-              className="accent-[#10B981] h-3.5 w-3.5 border-[#27272A] bg-[#131313] rounded-none focus:ring-0"
-            />
-            PUBLIC API ACCESS
-          </label>
-        </div>
       </div>
 
-      {/* Right Column: Live Preview & Confirm (col-span-4) */}
-      <div className="col-span-4 p-6 bg-[#131313] flex flex-col justify-between min-h-[600px]">
-        {/* Title */}
-        <div className="space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 font-technical">
-            Live Preview
-          </h3>
+      {/* ── Right Panel: Label + Live Preview + Confirm (col-span-7, 4:6 ratio) ── */}
+      <div className="col-span-7 p-6 bg-[#131313] flex flex-col min-h-[600px]">
+        {/* Stack Label — moved to right panel */}
+        <div className="space-y-1.5 mb-4">
+          <label className="text-[10px] text-zinc-400 uppercase tracking-wider font-technical">
+            Stack Label
+          </label>
+          <Input
+            value={stackName}
+            onChange={(e) => setStackName(e.target.value)}
+            placeholder="e.g., Research_Engine_v1"
+            className="h-10 bg-[#0E0E0E] border-[#27272A] text-sm text-white placeholder:text-zinc-600 focus-visible:border-[#10B981] rounded-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          />
+        </div>
 
-          {/* Dummy Card Display */}
-          <div className="border border-[#27272A] bg-[#0E0E0E] p-4 flex flex-col gap-4 relative">
-            <div className="space-y-4">
-              {columns.map((col, idx) => {
-                if (!col.name.trim()) return null;
-                const value = getDummyValue(col.type);
-                const isBool = col.type === "BOOLEAN";
+        {/* Live Preview */}
+        <div className="space-y-3 flex-1 flex flex-col min-h-0">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 font-technical">
+              Live Preview
+            </h3>
+            <span className="text-[9px] text-zinc-600 font-technical uppercase">8 sample rows</span>
+          </div>
 
-                return (
-                  <div key={idx} className="space-y-1">
-                    <div className="text-[10px] text-zinc-500 uppercase tracking-wider font-technical truncate">
-                      {col.name.replace(/\s+/g, "_")}
-                    </div>
-                    {isBool ? (
-                      <div className="flex items-center gap-2 text-sm text-white font-technical font-semibold">
-                        <div className="h-4.5 w-4.5 bg-[#10B981]/20 border border-[#10B981] flex items-center justify-center p-0.5">
-                          <Check className="h-3 w-3 text-[#10B981]" />
-                        </div>
-                        <span>TRUE</span>
-                      </div>
-                    ) : col.type === "SELECT" ? (
-                      <div className="inline-block text-[10px] font-technical px-2 py-0.5 border border-[#10B981] text-[#10B981] bg-[#10B981]/5 font-semibold uppercase tracking-wider">
-                        {value}
-                      </div>
-                    ) : col.type === "RELATION" ? (
-                      <div className="text-xs text-[#10B981] underline cursor-pointer truncate font-technical">
-                        📎 {value}
-                      </div>
-                    ) : (
-                      <div className="text-sm font-semibold text-white font-technical truncate">
-                        {value}
-                      </div>
-                    )}
+          {/* Multi-Row Table Preview */}
+          <div className="border border-[#27272A] bg-[#0E0E0E] flex flex-col flex-1 min-h-0 overflow-hidden">
+            {/* Table header */}
+            <div className="flex border-b border-[#27272A] bg-[#1C1C1E] shrink-0">
+              {columns.filter(c => c.name.trim()).length > 0 ? (
+                columns.filter(c => c.name.trim()).map((col, idx) => (
+                  <div
+                    key={idx}
+                    className="flex-1 px-2 py-1.5 text-[9px] text-zinc-400 font-technical uppercase tracking-wider truncate border-r border-[#27272A] last:border-r-0"
+                    title={col.name}
+                  >
+                    {col.name.replace(/\s+/g, "_")}
                   </div>
-                );
-              })}
-
-              {columns.filter(c => c.name.trim()).length === 0 && (
-                <div className="text-xs text-zinc-600 font-technical italic text-center py-6">
-                  Define columns to preview record...
+                ))
+              ) : (
+                <div className="flex-1 px-2 py-1.5 text-[9px] text-zinc-600 font-technical italic text-center">
+                  Define columns to preview...
                 </div>
               )}
             </div>
+            {/* Table rows (8 sample rows) */}
+            <div className="flex-1 overflow-y-auto">
+              {columns.filter(c => c.name.trim()).length > 0 ? (
+                Array.from({ length: 8 }).map((_, rowIdx) => {
+                  const rowVariants = [
+                    "bg-transparent",
+                    "bg-white/[0.02]",
+                    "bg-transparent",
+                    "bg-white/[0.02]",
+                    "bg-transparent",
+                    "bg-white/[0.02]",
+                    "bg-transparent",
+                    "bg-white/[0.02]",
+                  ];
+                  return (
+                    <div
+                      key={rowIdx}
+                      className={`flex border-b border-[#27272A]/50 last:border-b-0 ${rowVariants[rowIdx]}`}
+                    >
+                      {columns.filter(c => c.name.trim()).map((col, colIdx) => {
+                        const value = getDummyValue(col.type);
+                        const isBool = col.type === "BOOLEAN";
 
-            <div className="border-t border-[#27272A] pt-3 mt-4 text-[9px] text-zinc-600 font-technical italic flex justify-between">
-              <span>Mock entry visualization</span>
-              <span>● READY</span>
+                        return (
+                          <div
+                            key={colIdx}
+                            className="flex-1 px-2 py-1.5 border-r border-[#27272A]/30 last:border-r-0 min-w-0"
+                          >
+                            {isBool ? (
+                              <div className="flex items-center gap-1">
+                                <div className={`h-3 w-3 border flex items-center justify-center flex-shrink-0 ${rowIdx % 2 === 0 ? "bg-[#10B981]/20 border-[#10B981]" : "border-[#27272A]"}`}>
+                                  {rowIdx % 2 === 0 && <Check className="h-2 w-2 text-[#10B981]" />}
+                                </div>
+                                <span className="text-[9px] text-zinc-500 font-technical">
+                                  {rowIdx % 2 === 0 ? "TRUE" : "FALSE"}
+                                </span>
+                              </div>
+                            ) : col.type === "SELECT" ? (
+                              <span className={`inline-block text-[8px] font-technical px-1.5 py-0.5 border font-semibold uppercase tracking-wider ${
+                                rowIdx % 3 === 0
+                                  ? "border-[#10B981] text-[#10B981] bg-[#10B981]/5"
+                                  : rowIdx % 3 === 1
+                                  ? "border-amber-500/30 text-amber-400 bg-amber-500/5"
+                                  : "border-indigo-500/30 text-indigo-400 bg-indigo-500/5"
+                              }`}>
+                                {["Active", "Pending", "Review"][rowIdx % 3]}
+                              </span>
+                            ) : col.type === "RELATION" ? (
+                              <span className="text-[9px] text-[#10B981]/70 underline truncate block font-technical">
+                                {value}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-zinc-300 font-technical truncate block">
+                                {col.type === "INT" ? String(Number(value) + rowIdx * 7) :
+                                 col.type === "FLOAT" ? (Number(value) + rowIdx * 0.13).toFixed(2) :
+                                 col.type === "DATE" ? `2026-06-${String(rowIdx + 1).padStart(2, "0")}` :
+                                 value}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="flex items-center justify-center h-full py-12 text-xs text-zinc-600 font-technical italic">
+                  Define columns to preview table...
+                </div>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="border-t border-[#27272A] px-3 py-1.5 text-[9px] text-zinc-600 font-technical italic flex justify-between shrink-0">
+              <span>● {columns.filter(c => c.name.trim()).length} cols × 8 rows</span>
+              <span>READY</span>
             </div>
           </div>
         </div>

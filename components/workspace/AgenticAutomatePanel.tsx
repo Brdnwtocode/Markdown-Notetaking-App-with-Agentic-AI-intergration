@@ -26,7 +26,7 @@ import {
   ChevronRight,
   Zap,
 } from "lucide-react";
-import toast from "react-hot-toast";
+import { toast } from "@/lib/toast";
 
 interface AgenticAutomatePanelProps {
   recordingId: string;

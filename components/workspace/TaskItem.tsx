@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { ChevronRight, ChevronDown, Edit, Trash2, Plus } from "lucide-react";
+import { ChevronRight, ChevronDown, Edit, Trash2, Plus, FileText } from "lucide-react";
 import { useWorkspaceStore } from "@/lib/store";
 import { Task, TaskStatus } from "@/lib/slices/tasksSlice";
 import { Button } from "@/components/ui/button";
@@ -13,18 +13,26 @@ interface TaskItemProps {
   onAddSubtask: (parentId: string) => void;
 }
 
-const getTaskProgress = (t: Task) => {
-  if (t.status === "DONE") return 100;
-  if (t.status === "IN_PROGRESS") return 50;
-  return 0;
-};
+function formatDueDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffDays = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 0) return `${Math.abs(diffDays)}d ago`;
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Tomorrow";
+  if (diffDays <= 7) return `${diffDays}d`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 
 export default function TaskItem({ task, depth, onEdit, onDelete, onAddSubtask }: TaskItemProps) {
   const { taskChildrenMap, loadedParents, fetchTaskChildren, optimisticPatchTask, setCurrentFocusedTaskId, currentFocusedTaskId } = useWorkspaceStore();
   const [expanded, setExpanded] = useState(false);
+  const [showDescription, setShowDescription] = useState(false);
   const children = taskChildrenMap[task.id] ?? [];
   const isLoaded = loadedParents[task.id];
   const hasChildren = children.length > 0;
+  const hasDescription = task.description && task.description.trim().length > 0;
 
   const handleExpand = async () => {
     if (!expanded && !isLoaded) await fetchTaskChildren(task.id);
@@ -43,7 +51,7 @@ export default function TaskItem({ task, depth, onEdit, onDelete, onAddSubtask }
     <div className="group w-full">
       {/* Row container */}
       <div
-        className={`flex items-center py-2.5 px-3 relative border-l-2 cursor-pointer transition-all duration-100 ${
+        className={`flex items-center py-2.5 px-3 border-l-2 cursor-pointer transition-all duration-100 ${
           isFocused ? "bg-white/5 border-l-[#10B981]" : "border-l-transparent hover:bg-white/5"
         }`}
         onClick={() => setCurrentFocusedTaskId(task.id)}
@@ -67,7 +75,7 @@ export default function TaskItem({ task, depth, onEdit, onDelete, onAddSubtask }
               e.stopPropagation();
               void handleExpand();
             }}
-            className="w-5 h-5 flex items-center justify-center text-zinc-500 hover:text-white transition-colors"
+            className="w-5 h-5 flex items-center justify-center text-zinc-500 hover:text-white transition-colors flex-shrink-0"
           >
             {hasChildren ? (
               expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />
@@ -76,24 +84,37 @@ export default function TaskItem({ task, depth, onEdit, onDelete, onAddSubtask }
             )}
           </button>
 
-          {/* Completion Progress Indicator for Depth 0 */}
-          {depth === 0 && (
-            <div className="w-7 h-7 rounded-full border border-[#27272A] bg-[#0E0E0E] flex items-center justify-center text-[8px] font-technical text-[#10B981] font-bold flex-shrink-0 select-none">
-              {getTaskProgress(task)}%
-            </div>
-          )}
-
-          {/* Task Info (Title and ID) */}
+          {/* Task Info (Title, ID, and description toggle) */}
           <div className="flex flex-col min-w-0">
-            <span
-              className={`text-sm truncate select-none ${
-                task.status === "DONE"
-                  ? "line-through text-emerald-500/80 font-medium"
-                  : "text-zinc-200 font-semibold"
-              }`}
-            >
-              {task.title}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`text-sm truncate select-none ${
+                  task.status === "DONE"
+                    ? "line-through text-emerald-500/80 font-medium"
+                    : "text-zinc-200 font-semibold"
+                }`}
+              >
+                {task.title}
+              </span>
+              {/* Description toggle button */}
+              {hasDescription && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDescription(!showDescription);
+                  }}
+                  title={showDescription ? "Hide description" : "Show description"}
+                  className={`flex-shrink-0 w-4 h-4 flex items-center justify-center rounded-sm transition-colors ${
+                    showDescription
+                      ? "text-[#10B981] bg-[#10B981]/10"
+                      : "text-zinc-600 hover:text-zinc-400"
+                  }`}
+                >
+                  <FileText size={10} />
+                </button>
+              )}
+            </div>
             <span className="text-[9px] text-zinc-500 font-technical tracking-wider uppercase mt-0.5 select-none">
               LI-{task.id.slice(0, 4).toUpperCase()}
             </span>
@@ -137,59 +158,77 @@ export default function TaskItem({ task, depth, onEdit, onDelete, onAddSubtask }
           )}
         </div>
 
-        {/* Column 4: Assignee Avatar (w-20) */}
-        <div className="w-20 flex justify-center flex-shrink-0">
-          {task.assignee ? (
-            <div className="h-6 w-6 rounded-full bg-zinc-800 border border-[#27272A] text-[9px] text-zinc-300 font-bold flex items-center justify-center font-technical select-none">
-              {task.assignee.slice(0, 2).toUpperCase()}
-            </div>
-          ) : (
-            <div className="h-6 w-6 border border-dashed border-[#27272A] text-zinc-600 flex items-center justify-center hover:text-zinc-400 hover:border-zinc-500 rounded-none transition-colors">
-              <Plus size={10} />
-            </div>
-          )}
+        {/* Column 4: Due Date (w-24) */}
+        <div className="w-24 flex justify-center flex-shrink-0">
+          <span
+            className={`text-[9px] font-technical uppercase tracking-wider select-none ${
+              !task.dueDate
+                ? "text-zinc-600"
+                : task.status === "DONE"
+                ? "text-[#10B981]"
+                : new Date(task.dueDate).getTime() < Date.now()
+                ? "text-[#EF4444]"
+                : "text-zinc-400"
+            }`}
+          >
+            {formatDueDate(task.dueDate)}
+          </span>
         </div>
 
-        {/* Floating actions menu (reveals absolute on hover) */}
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center bg-[#131313] border border-[#27272A] p-0.5 shadow-xl z-10">
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 rounded-none hover:bg-white/5 hover:text-white"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit(task);
-            }}
-            title="Edit Task"
-          >
-            <Edit size={11} />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 rounded-none hover:bg-white/5 hover:text-white"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddSubtask(task.id);
-            }}
-            title="Add Subtask"
-          >
-            <Plus size={11} />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-6 w-6 rounded-none hover:bg-[#EF4444]/10 hover:text-[#EF4444]"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(task.id);
-            }}
-            title="Delete Task"
-          >
-            <Trash2 size={11} />
-          </Button>
+        {/* Column 5: Actions (w-20) — visible on hover */}
+        <div className="w-20 flex justify-center flex-shrink-0">
+          <div className="hidden group-hover:flex items-center gap-0.5 bg-[#131313] border border-[#27272A] p-0.5">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 rounded-none hover:bg-white/5 hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(task);
+              }}
+              title="Edit Task"
+            >
+              <Edit size={11} />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 rounded-none hover:bg-white/5 hover:text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddSubtask(task.id);
+              }}
+              title="Add Subtask"
+            >
+              <Plus size={11} />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6 rounded-none hover:bg-[#EF4444]/10 hover:text-[#EF4444]"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(task.id);
+              }}
+              title="Delete Task"
+            >
+              <Trash2 size={11} />
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* Description expandable area */}
+      {showDescription && hasDescription && (
+        <div
+          className="px-3 py-2.5 bg-[#0A0A0A] border-b border-[#27272A]"
+          style={{ paddingLeft: `${depth * 20 + 48}px` }}
+        >
+          <p className="text-xs text-zinc-400 font-sans leading-relaxed whitespace-pre-wrap break-words">
+            {task.description}
+          </p>
+        </div>
+      )}
 
       {/* Children list */}
       {expanded && children.map((child) => (
