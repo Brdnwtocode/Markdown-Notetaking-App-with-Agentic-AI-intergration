@@ -55,21 +55,75 @@ export default function NotePage() {
   const [note, setNote] = useState<any>(null);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
+  const [contentVisible, setContentVisible] = useState(false);
   const { setCurrentNoteId, noteCache, upsertNoteCache, optimisticPatchNote, optimisticDeleteNote, openTab, isRawMarkdownView, toggleRawMarkdownView, saveTabScrollPosition, getTabScrollPosition } =
     useWorkspaceStore();
 
   // ── Scroll position persistence ──────────────────────────────────
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollTimer = useRef<NodeJS.Timeout>();
+  const scrollRestoreAttemptRef = useRef(0);
+  const scrollRestoreTimerRef = useRef<NodeJS.Timeout>();
 
-  // Restore saved scroll position when this note tab becomes active
+  // Restore saved scroll position ONLY after the editor is fully mounted
+  // AND the DOM has sufficient height. The Milkdown editor loads async,
+  // so a naive scrollTop assignment on mount gets clamped to 0 because
+  // the container's scrollHeight is still tiny. We poll scrollHeight
+  // until it exceeds the saved position, then apply with smooth behavior.
   useEffect(() => {
-    const savedPos = getTabScrollPosition(noteId);
-    if (savedPos > 0 && scrollRef.current) {
-      scrollRef.current.scrollTop = savedPos;
+    // Reset state for new noteId
+    scrollRestoreAttemptRef.current = 0;
+    if (scrollRestoreTimerRef.current) {
+      clearTimeout(scrollRestoreTimerRef.current);
+      scrollRestoreTimerRef.current = undefined;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noteId]);
+
+    if (loading || !note) return;
+
+    const savedPos = getTabScrollPosition(noteId);
+    if (savedPos <= 0) return;
+
+    const MAX_ATTEMPTS = 60; // 60 × 100ms = 6s max wait for editor to render
+    const POLL_INTERVAL = 100; // ms
+
+    const tryRestore = () => {
+      const el = scrollRef.current;
+      if (!el) return;
+
+      // Only apply when the container is tall enough to hold the saved position
+      if (el.scrollHeight > savedPos) {
+        el.scrollTo({ top: savedPos, behavior: "smooth" });
+        return;
+      }
+
+      scrollRestoreAttemptRef.current++;
+      if (scrollRestoreAttemptRef.current < MAX_ATTEMPTS) {
+        scrollRestoreTimerRef.current = setTimeout(tryRestore, POLL_INTERVAL);
+      }
+    };
+
+    // Delay initial attempt to let React commit + Milkdown start rendering
+    scrollRestoreTimerRef.current = setTimeout(tryRestore, 200);
+
+    return () => {
+      if (scrollRestoreTimerRef.current) {
+        clearTimeout(scrollRestoreTimerRef.current);
+      }
+    };
+  }, [loading, note, noteId, getTabScrollPosition]);
+
+  // ── Fade-in content after loading completes ──────────────────────
+  // Stagger: show content with a short delay after loading resolves
+  // to avoid the jarring flash of unstyled editor mount.
+  useEffect(() => {
+    if (!loading && note) {
+      // Small delay so the DOM has a frame to paint the layout skeleton
+      const timer = setTimeout(() => setContentVisible(true), 50);
+      return () => clearTimeout(timer);
+    } else {
+      setContentVisible(false);
+    }
+  }, [loading, note]);
 
   // Save scroll position on scroll (debounced 150ms)
   const handleScroll = useCallback(() => {
@@ -161,15 +215,27 @@ export default function NotePage() {
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <p className="text-muted-foreground">Loading note...</p>
+      <div className="h-full w-full bg-[#1e1e1e] flex items-center justify-center">
+        {/* ── Loading skeleton that mimics the final layout ─────── */}
+        <div className="max-w-4xl mx-auto px-16 py-20 w-full animate-pulse space-y-8">
+          {/* Title skeleton */}
+          <div className="h-12 bg-white/5 rounded-lg w-2/3" />
+          {/* Content skeleton lines */}
+          <div className="space-y-3 pt-4">
+            <div className="h-4 bg-white/5 rounded w-full" />
+            <div className="h-4 bg-white/5 rounded w-5/6" />
+            <div className="h-4 bg-white/5 rounded w-4/6" />
+            <div className="h-4 bg-white/5 rounded w-full" />
+            <div className="h-4 bg-white/5 rounded w-3/6" />
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!note) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="h-full flex items-center justify-center bg-[#1e1e1e]">
         <p className="text-muted-foreground">Note not found</p>
       </div>
     );
@@ -209,7 +275,17 @@ export default function NotePage() {
             which resolves via MilkdownProvider context shared with LiveEditor below */}
         <MarkdownToolbar />
 
-        <div className="max-w-4xl mx-auto px-16 py-20">
+        {/* ── Content wrapper with fade-in transition ────────────── */}
+        <div
+          className={`
+            max-w-4xl mx-auto px-16 py-20
+            transition-all duration-500 ease-out
+            ${contentVisible
+              ? "opacity-100 translate-y-0 blur-none"
+              : "opacity-0 translate-y-4 blur-sm"
+            }
+          `}
+        >
         <div className="space-y-8">
           <TextareaAutosize
             value={title}

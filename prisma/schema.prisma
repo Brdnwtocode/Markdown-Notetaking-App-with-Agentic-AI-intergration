@@ -26,6 +26,7 @@ model User {
   tasks   Task[]
   calendarEvents CalendarEvent[]
   recordings Recording[]
+  fileRecords FileRecord[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -72,6 +73,7 @@ model Folder {
   children  Folder[] @relation("FolderSubfolders")
   notes     Note[]
   stacks    Stack[]
+  fileRecords FileRecord[]
 
   @@index([userId])
 }
@@ -260,6 +262,50 @@ model Attachment {
   @@map("attachments")
   @@index([recordingId])
   @@index([userId])
+}
+
+// ─── Multi-Type File Storage ────────────────────────────────────────────────
+//
+// Polymorphic file record designed for unlimited extensibility:
+//   • folderId   → places the file in the explorer tree (Folder hierarchy)
+//   • entityType + entityId → links to ANY entity (note, recording, task,
+//     stack, calendar event, or future types) without schema changes.
+//
+// Examples:
+//   Attach image to a note:    entityType="note",    entityId="<noteId>"
+//   Attach PDF to a task:      entityType="task",    entityId="<taskId>"
+//   Attach audio to recording: entityType="recording", entityId="<recordingId>"
+//   General asset (orphaned):  entityType=null,      entityId=null
+
+model FileRecord {
+  id            String     @id @default(uuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Explorer-tree hierarchy (Folder the file lives in)
+  folderId      String?
+  folder        Folder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  // Polymorphic entity link — extensible to any current or future entity type
+  // No FK constraint by design: new entity types work without schema migrations
+  entityType    String?    // e.g. "note", "recording", "task", "stack", "calendar_event"
+  entityId      String?    // the ID of the linked entity
+
+  // File metadata
+  fileName      String
+  mimeType      String
+  storageKey    String     // S3 key (e.g. "images/abc123.png")
+  sizeBytes     Int
+  assetFolder   String?    // logical S3 category: "images", "videos", "documents", "audio", "other"
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@map("file_records")
+  @@index([userId])
+  @@index([folderId])
+  @@index([entityType, entityId])
+  @@index([mimeType])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -4,6 +4,13 @@
 **Status**: Feature Request for FastAPI Microservice  
 **Related Next.js Implementation**: `docs/Implementation Contracts/Context-Grabber-Implementation-Plan.md`
 
+> **📋 AUDIT STATUS (2026-06-16): ~80% MATCH — CANONICAL VERSION**
+> 
+> This is the **canonical** FastAPI context processing contract. The duplicate (`FastAPI-Context-Enrichment-Contract.md`) should be deleted.
+> 
+> The Next.js side (`lib/context/packer.ts`) implements the `packed_context` format described here.
+> Minor note: ContextPacker sends `content` as an object (parsed JSON) for STACK type, not a JSON string as implied by the example.
+
 **⚠️ IMPORTANT RULE**: NO DB CONTACT FOR AI FEATURE - FastAPI must NOT access SQL/database directly. All data comes from the frontend.
 
 ---

@@ -28,7 +28,7 @@ import {
   Plus, LogOut, Database, PanelLeftOpen, PanelLeftClose, 
   FileText, Table2, Search, ArrowUpAZ, ArrowDownAZ, 
   Calendar, Filter, CheckSquare, CalendarDays, MessageSquare,
-  ChevronRight, Folder, FolderPlus, Trash2, Edit, GripVertical, Loader2, Disc
+  ChevronRight, Folder, FolderPlus, Trash2, Edit, GripVertical, Loader2, Disc, File
 } from "lucide-react";
 import { TASKS_TAB_ID, CALENDAR_TAB_ID } from "@/lib/constants";
 import { useDrag, useDrop } from "react-dnd";
@@ -36,17 +36,21 @@ import { Folder as FolderType } from "@/lib/slices/foldersSlice";
 import SessionStopwatch from "@/components/workspace/SessionStopwatch";
 import { Note } from "@/lib/slices/notesSlice";
 import { Stack } from "@/lib/slices/stacksSlice";
+import { Recording } from "@/lib/slices/recordsSlice";
+import { FileRecord } from "@/lib/slices/fileRecordsSlice";
+import { UploadingFile } from "@/lib/slices/fileRecordsSlice";
 
 type SortMethod = "a-z" | "z-a" | "date-new" | "date-old" | "type";
 
 interface TreeNode {
   id: string;
   name: string;
-  type: "FOLDER" | "NOTE" | "STACK";
+  type: "FOLDER" | "NOTE" | "STACK" | "RECORDING" | "FILE";
   parentId: string | null;
   level: number;
   item: any;
   children?: TreeNode[];
+  uploadStatus?: "uploading" | "error"; // for in-progress file uploads only
 }
 
 // Helper to detect cyclic moves on the client
@@ -70,6 +74,9 @@ function buildTree(
   folders: FolderType[],
   notes: Note[],
   stacks: Stack[],
+  recordings: Recording[],
+  fileRecords: FileRecord[],
+  uploadingFiles: UploadingFile[],
   searchQuery: string,
   sortMethod: SortMethod
 ): TreeNode[] {
@@ -135,6 +142,53 @@ function buildTree(
     }
   });
 
+  // Recordings live at root level only (no folderId on Recording model)
+  recordings.forEach((r) => {
+    rootNodes.push({
+      id: r.id,
+      name: r.title || "Untitled Recording",
+      type: "RECORDING",
+      parentId: null,
+      level: 0,
+      item: r,
+    });
+  });
+
+  // FileRecords can live in folders or at root
+  fileRecords.forEach((fr) => {
+    const node: TreeNode = {
+      id: fr.id,
+      name: fr.fileName,
+      type: "FILE",
+      parentId: fr.folderId,
+      level: 0,
+      item: fr,
+    };
+    if (fr.folderId && folderNodesMap[fr.folderId]) {
+      folderNodesMap[fr.folderId].children?.push(node);
+    } else {
+      rootNodes.push(node);
+    }
+  });
+
+  // Uploading ghost nodes — show in-progress uploads in the tree
+  uploadingFiles.forEach((uf) => {
+    const node: TreeNode = {
+      id: uf.tempId,
+      name: uf.fileName,
+      type: "FILE",
+      parentId: uf.folderId,
+      level: 0,
+      item: uf,
+      uploadStatus: uf.status,
+    };
+    if (uf.folderId && folderNodesMap[uf.folderId]) {
+      folderNodesMap[uf.folderId].children?.push(node);
+    } else {
+      rootNodes.push(node);
+    }
+  });
+
   function setLevels(nodes: TreeNode[], level: number) {
     nodes.forEach((node) => {
       node.level = level;
@@ -165,6 +219,9 @@ function buildTree(
     nodes.sort((a, b) => {
       if (a.type === "FOLDER" && b.type !== "FOLDER") return -1;
       if (a.type !== "FOLDER" && b.type === "FOLDER") return 1;
+      // Files sort after folders but before other content types (except when type-sorting)
+      if (a.type === "FILE" && b.type !== "FILE" && b.type !== "FOLDER") return -1;
+      if (a.type !== "FILE" && a.type !== "FOLDER" && b.type === "FILE") return 1;
 
       switch (sortMethod) {
         case "a-z":
@@ -207,6 +264,7 @@ interface TreeNodeActions {
   setRenameFolderName: (name: string) => void;
   setShowFolderRenameDialog: (show: boolean) => void;
   handleDeleteFolder: (e: React.MouseEvent, folderId: string, name: string) => void;
+  onFilesDropped: (files: FileList, folderId: string | null) => void;
 }
 
 function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number; actions: TreeNodeActions }) {
@@ -221,6 +279,32 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
 
   const isExpanded = expandedFolderIds.has(node.id);
 
+  // ── Native file drop (OS drag-and-drop) ──────────────────────────────
+  const [isFileDragOver, setIsFileDragOver] = useState(false);
+
+  const handleNativeDragOver = useCallback((e: React.DragEvent) => {
+    // Only handle OS file drops (not react-dnd node drags)
+    if (e.dataTransfer.types.includes("Files")) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = "copy";
+      setIsFileDragOver(true);
+    }
+  }, []);
+
+  const handleNativeDragLeave = useCallback((_e: React.DragEvent) => {
+    setIsFileDragOver(false);
+  }, []);
+
+  const handleNativeDrop = useCallback((e: React.DragEvent) => {
+    setIsFileDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      actions.onFilesDropped(e.dataTransfer.files, node.id);
+    }
+  }, [node.id, actions]);
+
   const [{ isDragging }, drag] = useDrag(() => ({
     type: "NODE",
     item: { id: node.id, type: "FOLDER" },
@@ -231,14 +315,18 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
 
   const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: "NODE",
-    canDrop: (item: { id: string; type: "FOLDER" | "NOTE" | "STACK" }) => {
+    canDrop: (item: { id: string; type: "FOLDER" | "NOTE" | "STACK" | "RECORDING" | "FILE" }) => {
       if (item.id === node.id) return false;
+      // Files cannot be moved via react-dnd (use native file drop instead)
+      if (item.type === "FILE") return false;
+      // Recordings cannot be moved into folders (no folderId on Recording model)
+      if (item.type === "RECORDING") return false;
       if (item.type === "FOLDER") {
         return !isDescendantFolder(item.id, node.id, folders);
       }
       return true;
     },
-    drop: (item: { id: string; type: "FOLDER" | "NOTE" | "STACK" }, monitor) => {
+    drop: (item: { id: string; type: "FOLDER" | "NOTE" | "STACK" | "RECORDING" | "FILE" }, monitor) => {
       if (monitor.didDrop()) return;
       
       if (item.type === "FOLDER") {
@@ -251,6 +339,7 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
         optimisticMoveStack(item.id, node.id);
         toast.success("Stack moved");
       }
+      // RECORDING / FILE: not valid for folder drop, ignored
     },
     collect: (monitor) => ({
       isOver: monitor.isOver({ shallow: true }),
@@ -261,7 +350,13 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
   const isHighlight = isOver && canDrop;
 
   return (
-    <div ref={(el) => { drag(drop(el)); }} className="group relative">
+    <div
+      ref={(el) => { drag(drop(el)); }}
+      className={`group relative ${isFileDragOver ? "ring-2 ring-[#10B981] bg-[#10B9810D]" : ""}`}
+      onDragOver={handleNativeDragOver}
+      onDragLeave={handleNativeDragLeave}
+      onDrop={handleNativeDrop}
+    >
       {/* Indentation Guidelines */}
       {Array.from({ length: level }).map((_, idx) => (
         <div
@@ -272,7 +367,7 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
       ))}
       
       <div
-        className={`flex items-center gap-1.5 py-1 pr-2 text-sm select-none transition-colors duration-75 cursor-pointer relative border border-transparent ${
+        className={`flex items-center gap-1.5 py-1 pr-2 text-sm select-none transition-all duration-200 cursor-pointer relative border border-transparent ${
           isHighlight 
             ? "border-dashed border-[#10B981] bg-[#10B9810D] glow-emerald-subtle" 
             : isDragging
@@ -298,8 +393,8 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
           </span>
         </span>
 
-        {/* Context Actions */}
-        <div className="hidden group-hover:flex items-center gap-0.5 ml-auto pl-1 bg-[#131313] md:bg-transparent rounded z-10">
+        {/* Context Actions — opacity toggle avoids layout shift */}
+        <div className="flex items-center gap-0.5 ml-auto pl-1 bg-[#131313] md:bg-transparent rounded z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
           <button
             title="New Subfolder"
             onClick={(e) => {
@@ -381,23 +476,62 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
 }
 
 function FileNodeRow({ node, level }: { node: TreeNode; level: number }) {
+  const router = useRouter();
   const {
     currentNoteId,
     currentStackId,
+    activeRecordingId,
+    setActiveRecordingId,
+    openTab,
     optimisticDeleteNote,
+    deleteFileRecord,
+    isSplitView,
+    setPaneActiveTab,
   } = useWorkspaceStore();
 
   const isActive = node.type === "NOTE" 
     ? currentNoteId === node.id 
-    : currentStackId === node.id;
+    : node.type === "STACK"
+      ? currentStackId === node.id
+      : node.type === "RECORDING"
+        ? activeRecordingId === node.id
+        : false; // FILE type has no active state
 
   const href = node.type === "NOTE"
     ? `/workspace/notes/${node.id}`
-    : `/workspace/stacks/${node.id}`;
+    : node.type === "STACK"
+      ? `/workspace/stacks/${node.id}`
+      : node.type === "RECORDING"
+        ? `/workspace/records`
+        : `/workspace/files/${node.id}`; // FILE type — now routes to file viewer
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (node.type === "RECORDING") {
+      e.preventDefault();
+      setActiveRecordingId(node.id);
+      openTab(node.id, "RECORDS", node.name);
+      router.push("/workspace/records");
+    } else if (node.type === "NOTE") {
+      openTab(node.id, "NOTE", node.name);
+    } else if (node.type === "STACK") {
+      openTab(node.id, "STACK", node.name);
+    } else if (node.type === "FILE") {
+      e.preventDefault();
+      const fr = node.item as FileRecord;
+      openTab(fr.id, "FILE", fr.fileName);
+      router.push(`/workspace/files/${fr.id}`);
+    }
+    // In split view, activate this tab in its assigned pane
+    if (isSplitView && (node.type === "NOTE" || node.type === "STACK" || node.type === "FILE")) {
+      const pane = useWorkspaceStore.getState().tabPaneAssignments[node.id] ?? "left";
+      setPaneActiveTab(pane, node.id);
+    }
+  };
 
   const [{ isDragging }, drag] = useDrag(() => ({
     type: "NODE",
     item: { id: node.id, type: node.type },
+    canDrag: node.type !== "FILE", // Files cannot be dragged within tree
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
@@ -406,6 +540,24 @@ function FileNodeRow({ node, level }: { node: TreeNode; level: number }) {
   const handleDeleteFile = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (node.type === "RECORDING") {
+      if (confirm(`Are you sure you want to delete this recording?`)) {
+        try {
+          await axios.delete(`/api/records/${node.id}`);
+          useWorkspaceStore.getState().deleteRecording(node.id);
+          toast.success("Recording deleted");
+        } catch {
+          toast.error("Failed to delete recording");
+        }
+      }
+      return;
+    }
+    if (node.type === "FILE") {
+      if (confirm(`Delete file "${node.name}"?`)) {
+        deleteFileRecord(node.id);
+      }
+      return;
+    }
     if (confirm(`Are you sure you want to delete this ${node.type === 'NOTE' ? 'note' : 'stack'}?`)) {
       if (node.type === "NOTE") {
         optimisticDeleteNote(node.id);
@@ -423,6 +575,9 @@ function FileNodeRow({ node, level }: { node: TreeNode; level: number }) {
   };
 
   const isOptimisticTemp = node.id.startsWith("temp_");
+  const isUploading = node.uploadStatus === "uploading";
+  const isUploadError = node.uploadStatus === "error";
+  const uploadItem = isUploading || isUploadError ? (node.item as UploadingFile) : null;
 
   return (
     <div ref={drag as any} className="group relative">
@@ -444,31 +599,66 @@ function FileNodeRow({ node, level }: { node: TreeNode; level: number }) {
             {node.name}
           </span>
         </div>
+      ) : isUploading ? (
+        /* Upload-in-progress ghost node */
+        <div
+          className="flex items-center gap-1.5 py-1 pr-3 text-sm select-none relative animate-pulse"
+          style={{ paddingLeft: `${(level * 16) + 8}px` }}
+        >
+          <Loader2 className="h-4 w-4 text-[#10B981] animate-spin flex-shrink-0" />
+          <File className="h-4 w-4 text-[#10B981]/50 flex-shrink-0" />
+          <span className="truncate flex-1 font-sans font-medium text-[14px] text-zinc-400">
+            {node.name}
+          </span>
+          <span className="ml-1 font-mono text-[10px] text-[#10B981] uppercase flex-shrink-0 tracking-wider font-semibold animate-pulse">
+            UPLOADING
+          </span>
+        </div>
+      ) : isUploadError ? (
+        /* Upload-failed ghost node */
+        <div
+          className="flex items-center gap-1.5 py-1 pr-3 text-sm select-none relative"
+          style={{ paddingLeft: `${(level * 16) + 8}px` }}
+          title={uploadItem?.errorMessage || "Upload failed"}
+        >
+          <File className="h-4 w-4 text-rose-400 flex-shrink-0" />
+          <span className="truncate flex-1 font-sans font-medium text-[14px] text-rose-400/70">
+            {node.name}
+          </span>
+          <span className="ml-1 font-mono text-[10px] text-rose-400 uppercase flex-shrink-0 tracking-wider font-semibold">
+            FAILED
+          </span>
+        </div>
       ) : (
         <Link
           href={href}
-          className={`flex items-center gap-1.5 py-1 pr-3 text-sm select-none border-l-2 relative transition-colors duration-75 ${
+          onClick={handleClick}
+          className={`flex items-center gap-1.5 py-1 pr-3 text-sm select-none border-l-2 relative transition-all duration-200 ${
             isActive
               ? "bg-[#131313] text-white border-l-[#10B981] pl-[6px]"
               : "text-[#A1A1AA] border-l-transparent hover:text-white hover:bg-[#131313] pl-2"
           } ${isDragging ? "opacity-50 border border-[#10B981] bg-transparent cursor-grabbing" : ""}`}
           style={{ paddingLeft: `${(level * 16) + 8}px`, cursor: isDragging ? "grabbing" : "grab" }}
         >
-          {/* Grip Handle */}
-          <GripVertical className="h-3.5 w-3.5 text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+          {/* Grip Handle — invisible to avoid layout shift, visible on hover */}
+          <GripVertical className="h-3.5 w-3.5 text-zinc-600 invisible group-hover:visible flex-shrink-0" />
 
           {node.type === "NOTE" ? (
             <FileText className="h-4 w-4 text-zinc-400 flex-shrink-0" />
-          ) : (
+          ) : node.type === "STACK" ? (
             <Table2 className="h-4 w-4 text-indigo-400 flex-shrink-0" />
+          ) : node.type === "RECORDING" ? (
+            <Disc className="h-4 w-4 text-amber-400 flex-shrink-0" />
+          ) : (
+            <File className="h-4 w-4 text-sky-400 flex-shrink-0" />
           )}
           
           <span className="truncate flex-1 font-sans font-medium text-[14px]">
             {node.name}
           </span>
 
-          {/* Hover Actions */}
-          <div className="hidden group-hover:flex items-center gap-0.5 ml-auto pl-1 z-10 bg-[#131313] rounded">
+          {/* Hover Actions — opacity toggle avoids layout shift */}
+          <div className="flex items-center gap-0.5 ml-auto pl-1 z-10 bg-[#131313] rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
             <button
               title="Delete"
               onClick={handleDeleteFile}
@@ -477,11 +667,6 @@ function FileNodeRow({ node, level }: { node: TreeNode; level: number }) {
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
-
-          {/* Extension Badge */}
-          <span className="ml-1 font-mono text-[10px] text-[#A1A1AA] uppercase flex-shrink-0 tracking-wider font-semibold">
-            {node.type === "NOTE" ? "[.MD]" : "[.STK]"}
-          </span>
         </Link>
       )}
     </div>
@@ -500,18 +685,21 @@ function ExplorerTree({ searchQuery, sortMethod, actions }: { searchQuery: strin
     folders,
     notes,
     stacks,
+    recordings,
+    fileRecords,
+    uploadingFiles,
     optimisticMoveFolder,
     optimisticMoveStack,
     optimisticPatchNote,
   } = useWorkspaceStore();
 
   const treeData = useMemo(() => {
-    return buildTree(folders, notes, stacks, searchQuery, sortMethod);
-  }, [folders, notes, stacks, searchQuery, sortMethod]);
+    return buildTree(folders, notes, stacks, recordings, fileRecords, uploadingFiles, searchQuery, sortMethod);
+  }, [folders, notes, stacks, recordings, fileRecords, uploadingFiles, searchQuery, sortMethod]);
 
   const [{ isOverRoot }, dropRoot] = useDrop(() => ({
     accept: "NODE",
-    drop: (item: { id: string; type: "FOLDER" | "NOTE" | "STACK" }, monitor) => {
+    drop: (item: { id: string; type: "FOLDER" | "NOTE" | "STACK" | "RECORDING" }, monitor) => {
       if (monitor.didDrop()) return;
       
       if (item.type === "FOLDER") {
@@ -524,26 +712,60 @@ function ExplorerTree({ searchQuery, sortMethod, actions }: { searchQuery: strin
         optimisticMoveStack(item.id, null);
         toast.success("Stack moved to root");
       }
+      // RECORDING: already at root, no-op
     },
     collect: (monitor) => ({
       isOverRoot: monitor.isOver({ shallow: true }),
     }),
   }), [folders]);
 
+  // ── Native file drop on root area ────────────────────────────────────
+  const [isRootFileDragOver, setIsRootFileDragOver] = useState(false);
+
+  const handleRootDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("Files")) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = "copy";
+      setIsRootFileDragOver(true);
+    }
+  }, []);
+
+  const handleRootDragLeave = useCallback((_e: React.DragEvent) => {
+    setIsRootFileDragOver(false);
+  }, []);
+
+  const handleRootDrop = useCallback((e: React.DragEvent) => {
+    setIsRootFileDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      actions.onFilesDropped(e.dataTransfer.files, null);
+    }
+  }, [actions]);
+
   return (
     <div 
       ref={dropRoot as any}
       className={`flex-1 overflow-auto p-2 space-y-0.5 scrollbar-thin scrollbar-thumb-zinc-800 relative min-h-[250px] ${
         isOverRoot ? "bg-white/5 border border-dashed border-[#10B981] rounded-none" : ""
-      }`}
+      } ${isRootFileDragOver ? "ring-2 ring-[#10B981] bg-[#10B9810D]" : ""}`}
+      onDragOver={handleRootDragOver}
+      onDragLeave={handleRootDragLeave}
+      onDrop={handleRootDrop}
     >
       {treeData.map((node) => (
         <TreeNodeRow key={node.id} node={node} level={0} actions={actions} />
       ))}
       
-      {treeData.length === 0 && (
+      {treeData.length === 0 && uploadingFiles.length === 0 && (
         <div className="px-3 py-8 text-sm text-zinc-500 text-center font-technical">
           {searchQuery ? "No files found" : "No files yet"}
+        </div>
+      )}
+      {treeData.length === 0 && uploadingFiles.length > 0 && (
+        <div className="px-3 py-8 text-sm text-zinc-500 text-center font-technical">
+          Uploading files...
         </div>
       )}
     </div>
@@ -578,6 +800,7 @@ export default function Sidebar() {
     stacks,
     setNotes,
     setStacks,
+    setRecordings,
     optimisticCreateNote,
     openTab,
     isChatOpen,
@@ -587,6 +810,10 @@ export default function Sidebar() {
     optimisticCreateFolder,
     optimisticRenameFolder,
     syncState,
+    fetchFileRecords,
+    uploadAndCreateFileRecord,
+    uploadingFiles,
+    setFolderExpanded,
   } = useWorkspaceStore();
 
   const fetchNotes = useCallback(async () => {
@@ -607,12 +834,23 @@ export default function Sidebar() {
     }
   }, [setStacks]);
 
+  const fetchRecordings = useCallback(async () => {
+    try {
+      const res = await axios.get("/api/records");
+      setRecordings(res.data);
+    } catch (error) {
+      console.error("Failed to fetch recordings", error);
+    }
+  }, [setRecordings]);
+
   useEffect(() => {
     fetchNotes();
     fetchStacks();
     fetchFolders();
+    fetchRecordings();
+    fetchFileRecords();
     setMounted(true);
-  }, [fetchNotes, fetchStacks, fetchFolders]);
+  }, [fetchNotes, fetchStacks, fetchFolders, fetchRecordings, fetchFileRecords]);
 
   const createNoteInFolder = useCallback(async (folderId: string | null = null) => {
     try {
@@ -688,11 +926,13 @@ export default function Sidebar() {
       const nextFolders = folders.filter((f) => !folderIdsToDelete.includes(f.id));
       const nextNotes = notes.filter((n) => !n.folderId || !folderIdsToDelete.includes(n.folderId));
       const nextStacks = stacks.filter((s) => !s.folderId || !folderIdsToDelete.includes(s.folderId));
+      const nextRecordings = snapshot.recordings; // Recordings have no folderId, unaffected
       
       useWorkspaceStore.setState({
         folders: nextFolders,
         notes: nextNotes,
         stacks: nextStacks,
+        recordings: nextRecordings,
         syncState: "SAVING",
         isSaving: true,
       });
@@ -730,6 +970,29 @@ export default function Sidebar() {
     }
   };
 
+  const handleFilesDropped = useCallback(async (files: FileList, folderId: string | null) => {
+    // Auto-expand the target folder so the user sees the ghost nodes
+    if (folderId) {
+      setFolderExpanded(folderId, true);
+    }
+    let successCount = 0;
+    let failCount = 0;
+    for (let i = 0; i < files.length; i++) {
+      try {
+        await uploadAndCreateFileRecord(files[i], folderId);
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
+    if (successCount > 0) {
+      toast.success(`${successCount} file${successCount > 1 ? "s" : ""} uploaded`);
+    }
+    if (failCount > 0) {
+      toast.error(`${failCount} upload${failCount > 1 ? "s" : ""} failed`);
+    }
+  }, [uploadAndCreateFileRecord, setFolderExpanded]);
+
   const treeActions = useMemo(() => ({
     setCreateFolderParentId,
     setShowFolderCreateDialog,
@@ -740,9 +1003,11 @@ export default function Sidebar() {
     setRenameFolderName,
     setShowFolderRenameDialog,
     handleDeleteFolder,
+    onFilesDropped: handleFilesDropped,
   }), [
     createNoteInFolder,
     handleDeleteFolder,
+    handleFilesDropped,
   ]);
 
   return (
@@ -841,8 +1106,15 @@ export default function Sidebar() {
         <div className="w-72 bg-[#0E0E0E] border-r border-[#27272A] flex flex-col h-full relative flex-shrink-0 z-10">
           <div className="p-3 border-b border-[#27272A] space-y-2">
             <div className="flex items-center justify-between">
-              <h2 className="text-xs font-semibold tracking-tighter text-white uppercase font-technical">Workspace</h2>
+              <h2 className="text-xs font-semibold tracking-tighter text-white uppercase font-technical">Explorer</h2>
               <div className="flex items-center gap-0.5">
+                {/* Upload progress badge */}
+                {uploadingFiles.length > 0 && (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono text-[#10B981] bg-[#10B981]/10 rounded">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    {uploadingFiles.length}
+                  </span>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -916,6 +1188,9 @@ export default function Sidebar() {
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]"></span>
               </span>
               <SessionStopwatch />
+              {uploadingFiles.length > 0 && (
+                <span className="text-[#10B981]">UPL {uploadingFiles.length}</span>
+              )}
             </div>
             <div>
               Sync: {syncState === "SAVING" ? "99%" : syncState === "ERROR" ? "ERR" : "100%"}

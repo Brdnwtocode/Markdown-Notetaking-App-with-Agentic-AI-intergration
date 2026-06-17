@@ -2,6 +2,7 @@ import { auth } from "@/app/auth";
 import { redirect } from "next/navigation";
 import Sidebar from "@/components/workspace/Sidebar";
 import TabBar from "@/components/workspace/TabBar";
+import DynamicLayout from "@/components/workspace/DynamicLayout";
 import PushToTalk from "@/components/shared/PushToTalk";
 import ChatSidebar from "@/components/workspace/ChatSidebar";
 import WorkspaceUserSync from "@/components/workspace/WorkspaceUserSync";
@@ -30,7 +31,7 @@ export default async function WorkspaceLayout({
           <TabBar />
           <main className="flex-1 overflow-hidden p-4 sm:p-5">
             <div className="flex h-full flex-col rounded-lg border border-[#27272A] bg-[#0e0e0e] shadow-2xl overflow-hidden">
-              {children}
+              <DynamicLayout>{children}</DynamicLayout>
             </div>
           </main>
           <PushToTalk />

@@ -29,12 +29,30 @@ export default function RecordsWorkstation() {
   const {
     isRecording, isPaused, sttEnabled, recordingDurationSec, liveTranscript,
     isPlaying, playbackSpeed, playbackVolume, currentPlaybackTime,
-    activeRecordingId,
+    activeRecordingId, recordings,
     setIsRecording, setIsPaused, setSttEnabled, setRecordingDurationSec,
     setLiveTranscript, resetRecordingState,
     setIsPlaying, setPlaybackSpeed, setPlaybackVolume, setCurrentPlaybackTime,
     setRecordings, setRecordingsLoading, setActiveRecordingId,
   } = store;
+
+  // ─── Lookup active recording for audio save status ────────────────────
+  const activeRecording = activeRecordingId
+    ? recordings.find((r) => r.id === activeRecordingId) ?? null
+    : null;
+
+  const audioSaveStatus: "none" | "saved" | "failed" =
+    !activeRecording
+      ? "none"
+      : activeRecording.audioKey && (activeRecording.audioSizeBytes ?? 0) > 0
+        ? "saved"
+        : "failed";
+
+  const formattedAudioSize = activeRecording?.audioSizeBytes
+    ? activeRecording.audioSizeBytes >= 1_000_000
+      ? `${(activeRecording.audioSizeBytes / 1_000_000).toFixed(1)} MB`
+      : `${(activeRecording.audioSizeBytes / 1_000).toFixed(0)} KB`
+    : null;
 
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -56,6 +74,31 @@ export default function RecordsWorkstation() {
 
   // ─── Auto-scroll transcript ────────────────────────────────────────────
   useEffect(() => { transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [liveTranscript]);
+
+  // ─── Auto-load recording when activeRecordingId changes (e.g. from sidebar) ──
+  useEffect(() => {
+    if (!activeRecordingId) return;
+    const rec = recordings.find((r) => r.id === activeRecordingId);
+    if (!rec) return;
+    // Skip if already loaded (avoid re-fetching during save flow)
+    setLiveTranscript(rec.transcript || "");
+    setHasUnsavedRecording(false);
+    if (rec.audioKey) {
+      (async () => {
+        try {
+          const res = await fetch(`/api/records/${rec.id}/audio`);
+          if (res.ok) {
+            const { url } = await res.json();
+            setAudioUrl(url);
+          } else {
+            setAudioUrl(null);
+          }
+        } catch { setAudioUrl(null); }
+      })();
+    } else {
+      setAudioUrl(null);
+    }
+  }, [activeRecordingId, recordings, setLiveTranscript]);
 
   // ─── Audio playback sync ───────────────────────────────────────────────
   useEffect(() => {
@@ -273,6 +316,21 @@ export default function RecordsWorkstation() {
           )}
           {hasUnsavedRecording && !isRecording && (
             <span className="text-[10px] font-mono text-amber-400 uppercase tracking-wider">⚠ Local only</span>
+          )}
+          {/* Audio save status badge for persisted recordings */}
+          {audioSaveStatus === "saved" && formattedAudioSize && (
+            <span className="flex items-center gap-1 text-[10px] font-mono text-[#10B981] uppercase tracking-wider">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-[#10B981] opacity-40" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#10B981]" />
+              </span>
+              ✔ Audio Saved ({formattedAudioSize})
+            </span>
+          )}
+          {audioSaveStatus === "failed" && (
+            <span className="flex items-center gap-1 text-[10px] font-mono text-red-400 uppercase tracking-wider">
+              ⚠ Transcript Only / Audio Save Failed
+            </span>
           )}
         </div>
 

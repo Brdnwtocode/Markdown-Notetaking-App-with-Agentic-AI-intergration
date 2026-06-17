@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { X, Sparkles, Send, Mic, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useWorkspaceStore } from "@/lib/store";
 import { packContext } from "@/lib/voice/contextHelpers";
 import { buildVoiceFormData, getFormDataContext } from "@/lib/voice/buildFormData";
@@ -47,6 +47,7 @@ export default function ChatSidebar() {
   } = useWorkspaceStore();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [inputText, setInputText] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [expandedContextId, setExpandedContextId] = useState<string | null>(null);
@@ -55,6 +56,15 @@ export default function ChatSidebar() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
+
+  // Auto-resize textarea as content grows
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  }, [inputText]);
 
   // ─── Send text message ────────────────────────────────────────────
 
@@ -130,16 +140,26 @@ export default function ChatSidebar() {
       }
     },
     [addChatMessage, updateChatMessage, currentNoteId, currentStackId,
-     currentFocusedTaskId, cursorPosition, tasks, taskChildrenMap,
+     currentFocusedTaskId, tasks, taskChildrenMap,
      noteCache, stacks, addVoiceMutatingId, removeVoiceMutatingId]
   );
 
-  // Handle text input submit
+  // Handle text input submit (button click)
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || isProcessing) return;
     sendMessage(inputText.trim());
     setInputText("");
+  };
+
+  // Intercept Enter key: Enter sends, Shift+Enter inserts newline
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (!inputText.trim() || isProcessing) return;
+      sendMessage(inputText.trim());
+      setInputText("");
+    }
   };
 
   // ─── Voice STT integration ────────────────────────────────────────
@@ -343,22 +363,18 @@ export default function ChatSidebar() {
       {/* Input area */}
       <div className="p-4 border-t border-white/5 bg-[#131313]/95 backdrop-blur-md shrink-0">
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-          <div className="relative flex items-center bg-[#0E0E0E]/90 border border-white/10 focus-within:border-[#10B981]/50 focus-within:ring-1 focus-within:ring-[#10B981]/20 transition-all rounded-xl p-1">
-            <Input
+          <div className="relative flex items-start bg-[#0E0E0E]/90 border border-white/10 focus-within:border-[#10B981]/50 focus-within:ring-1 focus-within:ring-[#10B981]/20 transition-all rounded-xl p-1">
+            <Textarea
+              ref={textareaRef}
               id="chat-input"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder={isRecording ? "Listening…" : "Message AI Companion…"}
               disabled={isProcessing}
-              className="flex-1 bg-transparent border-0 text-white text-sm h-10 rounded-lg placeholder:text-zinc-500 font-technical focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-0 pl-3 py-1 pr-16"
+              rows={1}
+              className="flex-1 bg-transparent border-0 text-white text-sm resize-none rounded-lg placeholder:text-zinc-500 font-technical focus-visible:ring-0 focus-visible:ring-offset-0 focus-visible:border-0 pl-3 py-2 pr-2 min-h-[40px] max-h-[200px]"
             />
-            {/* Enter hint */}
-            {inputText.trim() && !isProcessing && (
-              <span className="absolute right-12 text-[10px] text-zinc-600 font-technical select-none flex items-center gap-0.5 mr-1.5">
-                <span>Enter</span>
-                <span className="text-[8px]">↵</span>
-              </span>
-            )}
             {/* Send button */}
             <Button
               type="submit"

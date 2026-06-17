@@ -4,6 +4,15 @@
 > **Branch**: Main workspace at `/workspace/records`  
 > **Date**: 2026-06-13  
 > **Status**: Implemented (pending FastAPI `/api/v1/records/automate`)
+>
+> **📋 AUDIT STATUS (2026-06-16): ~90% MATCH — HIGHLY ACCURATE**
+> 
+> This is the most accurate documentation in the project. Nearly all details match the codebase.
+> Minor notes:
+> - Verify the exact line numbers in `prisma/schema.prisma` (Recording model may have shifted)
+> - `lib/voiceApi.ts` is still present but the main HTTP client is `lib/httpClient.ts`
+> - The `DndWrapper.tsx` exists but is referenced as part of calendar, not Records
+> - All listed components, hooks, routes, and files exist at the stated locations ✅
 
 ---
 

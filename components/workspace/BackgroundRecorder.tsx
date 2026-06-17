@@ -133,7 +133,7 @@ export default function BackgroundRecorder() {
         delete (window as any).__bgChunks;
       }
     }
-  }, [isRecording, sttEnabled, stt, setIsRecording, setLiveTranscript]);
+  }, [isRecording, sttEnabled, stt, setIsRecording, setLiveTranscript, startMicOnlyRecording]);
 
   // ─── Duration timer ──────────────────────────────────────────────────
   useEffect(() => {

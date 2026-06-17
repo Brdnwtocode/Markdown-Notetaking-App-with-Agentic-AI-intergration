@@ -35,15 +35,18 @@ import {
   Code2,
   Table,
 } from 'lucide-react';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { TextSelection } from 'prosemirror-state';
 import { useWorkspaceStore } from "@/lib/store";
 import * as Diff from 'diff';
 import { adjustCursorPosition, applySuggestionPadding } from "@/lib/utils";
+import { createImageUploadPlugin } from './imageUploadPlugin';
 
 interface LiveEditorProps {
   noteId: string;
   content: string;
+  /** Fires after Milkdown editor is fully mounted and rendered */
+  onEditorReady?: () => void;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -96,10 +99,6 @@ interface LiveEditorProps {
 //    <MilkdownProvider> (provided by the note page) for useInstance() to work.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const btnBase =
-  "p-1 hover:bg-white/5 rounded text-slate-500 hover:text-slate-300 transition-colors focus:outline-none";
-const divider = <div className="w-px h-4 bg-[#27272A]/30 mx-0.5" />;
-
 export function MarkdownToolbar() {
   // ── useInstance(): [loading, getEditor] tuple ────────────────────
   // The editor ref is populated when EditorComponent's useEditor()
@@ -109,6 +108,35 @@ export function MarkdownToolbar() {
   // IMPORTANT: This component MUST be rendered inside a <MilkdownProvider>
   // (provided by the note page) for useInstance() to resolve.
   const [, get] = useInstance();
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    const handleFocusIn = () => {
+      const active = document.activeElement;
+      if (active && (active.classList.contains('ProseMirror') || active.closest('.markdown-toolbar-container'))) {
+        setIsFocused(true);
+      }
+    };
+    const handleFocusOut = (e: FocusEvent) => {
+      const related = e.relatedTarget as HTMLElement;
+      if (related && (related.classList.contains('ProseMirror') || related.closest('.markdown-toolbar-container'))) {
+        return;
+      }
+      setIsFocused(false);
+    };
+
+    document.addEventListener('focusin', handleFocusIn);
+    document.addEventListener('focusout', handleFocusOut);
+
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn);
+      document.removeEventListener('focusout', handleFocusOut);
+    };
+  }, []);
+
+  const toolbarClasses = `markdown-toolbar-container sticky top-4 z-20 flex items-center gap-0.5 mx-auto w-fit px-3 py-1.5 transition-all duration-300 font-sans text-[13px] font-medium bg-[#131313]/95 backdrop-blur-sm border border-[#27272A]/60 rounded-lg shadow-lg hover:opacity-100 hover:blur-none hover:shadow-[0_0_20px_rgba(16,185,129,0.12)] hover:border-[#27272A] ${isFocused ? 'opacity-100 blur-none shadow-[0_0_20px_rgba(16,185,129,0.12)] border-[#27272A]' : 'opacity-25 blur-[0.5px]'}`;
+  const btnBase = "p-1.5 rounded-md text-[#A1A1AA] hover:bg-white/8 hover:text-[#10B981] active:scale-95 transition-all duration-150 focus:outline-none focus-visible:ring-1 focus-visible:ring-[#10B981]/40 flex items-center justify-center min-w-[30px]";
+  const divider = <div className="w-px h-5 bg-[#27272A]/50 mx-1 self-center rounded-full" />;
 
   // ── exec(cmdKey, ...args) — central command dispatcher ───────────
   // Step 1: Ensure the ProseMirror editorView has focus so keyboard
@@ -184,8 +212,58 @@ export function MarkdownToolbar() {
     });
   };
 
+  // ── safeInsertBlock(cmdKey) — custom block insertion ─────────────────
+  // Resolves the bug where tables/HRs render inside headings or break lists.
+  // We validate the current ProseMirror node selection. If inside an unsupported
+  // node (heading, code_block, list_item, blockquote), we insert a new paragraph
+  // sibling AFTER the current block and place the cursor there before inserting.
+  const safeInsertBlock = (cmdKey: any) => {
+    const editor = get();
+    if (!editor) return;
+
+    editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      if (!view) return;
+      if (!view.hasFocus()) {
+        view.focus();
+      }
+
+      const { state } = view;
+      const { $from } = state.selection;
+
+      // Walk up the node tree to find the innermost unsupported block
+      let targetDepth = -1;
+      for (let d = $from.depth; d > 0; d--) {
+        const nodeName = $from.node(d).type.name;
+        if (['heading', 'code_block', 'table', 'bullet_list', 'ordered_list', 'list_item', 'blockquote'].includes(nodeName)) {
+          targetDepth = d;
+          break;
+        }
+      }
+
+      if (targetDepth > 0) {
+        // Insert a new paragraph AFTER the unsupported block,
+        // move cursor there, THEN dispatch the insert command.
+        const afterPos = $from.after(targetDepth);
+        const paragraph = state.schema.nodes.paragraph;
+        if (paragraph) {
+          const tr = state.tr.insert(afterPos, paragraph.create());
+          const cursorPos = afterPos + 1;
+          tr.setSelection(TextSelection.create(tr.doc, cursorPos));
+          view.dispatch(tr);
+          // Now dispatch the insert command at the new safe position
+          editor.action(callCommand(cmdKey));
+          return;
+        }
+      }
+
+      // Safe context: dispatch directly
+      editor.action(callCommand(cmdKey));
+    });
+  };
+
   return (
-    <div className="sticky top-0 z-20 flex items-center gap-0 bg-transparent border-b border-[#27272A]/20 px-2 py-0.5 overflow-x-auto select-none">
+    <div className={toolbarClasses}>
       {/* ── Headings ── */}
       <button
         onMouseDown={(e) => {
@@ -322,7 +400,7 @@ export function MarkdownToolbar() {
       <button
         onMouseDown={(e) => {
           e.preventDefault();
-          exec(insertHrCommand.key);
+          safeInsertBlock(insertHrCommand.key);
         }}
         title="Horizontal rule"
         className={btnBase}
@@ -332,7 +410,7 @@ export function MarkdownToolbar() {
       <button
         onMouseDown={(e) => {
           e.preventDefault();
-          exec(insertTableCommand.key);
+          safeInsertBlock(insertTableCommand.key);
         }}
         title="Insert table"
         className={btnBase}
@@ -343,7 +421,7 @@ export function MarkdownToolbar() {
   );
 };
 
-const EditorComponent = ({ content, noteId }: { content: string; noteId: string }) => {
+const EditorComponent = ({ content, noteId, onEditorReady }: { content: string; noteId: string; onEditorReady?: () => void }) => {
   // ═══════════════════════════════════════════════════════════════════
   //  EditorComponent — Milkdown editor lifecycle + cursor tracking
   // ═══════════════════════════════════════════════════════════════════
@@ -411,6 +489,14 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
           } catch (e) {
             console.warn('[LiveEditor] Failed to restore cursor:', e);
           }
+        }
+
+        // Notify parent that editor is mounted — use rAF to ensure
+        // the DOM has been painted before the parent tries to scroll.
+        if (onEditorReady) {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => onEditorReady());
+          });
         }
         return;
       }
@@ -506,6 +592,17 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
 
           if (isEntityVoiceMutating(noteId)) return; // block autosave while voice is processing
 
+          // ── Strip pending (blob:) image references before save ──────
+          // Images still uploading have src="blob:..." — their markdown
+          // is `![alt](blob:...)`. We strip these so saves never block
+          // on in-flight uploads. Once the upload completes, the node's
+          // src is updated to `/api/images/...` and the next save will
+          // naturally include it.
+          const cleanedMarkdown = markdown.replace(
+            /!\[.*?\]\(blob:[^)]+\)\s*/g,
+            "",
+          );
+
           setIsSaving(true);
 
           if (autoSaveTimer.current) {
@@ -513,11 +610,17 @@ const EditorComponent = ({ content, noteId }: { content: string; noteId: string 
           }
 
           autoSaveTimer.current = setTimeout(async () => {
-            optimisticPatchNote(noteId, { content: markdown });
+            optimisticPatchNote(noteId, { content: cleanedMarkdown });
             setIsSaving(false);
           }, 1000);
         });
       })
+      // IMPORTANT: imageUploadPlugin MUST be registered BEFORE commonmark.
+      // ProseMirror calls handlePaste/handleDrop handlers in plugin registration
+      // order. The commonmark preset has its own image paste handler that would
+      // inline images as base64. By registering our plugin first, we intercept
+      // image pastes/drops before commonmark and upload to S3 instead.
+      .use(createImageUploadPlugin(noteId))
       .use(commonmark)
       .use(gfm)
       .use(history)
@@ -639,7 +742,7 @@ const DiffOverlay = ({ originalContent, newContent }: DiffOverlayProps) => {
 //  LiveEditor there.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export default function LiveEditor({ noteId, content }: LiveEditorProps) {
+export default function LiveEditor({ noteId, content, onEditorReady }: LiveEditorProps) {
   const { pendingMutation } = useWorkspaceStore();
   const isPending = pendingMutation?.type === "update_note" && pendingMutation.noteId === noteId;
 
@@ -673,7 +776,7 @@ export default function LiveEditor({ noteId, content }: LiveEditorProps) {
       <div className={isPending ? "opacity-30 pointer-events-none select-none" : ""}>
         {/* Key-based remounting ensures editor always picks up latest content via defaultValueCtx.
             Cursor position is tracked via DOM events + Zustand store, so it survives remounts. */}
-        <EditorComponent key={`active-${noteId}`} content={content} noteId={noteId} />
+        <EditorComponent key={`active-${noteId}`} content={content} noteId={noteId} onEditorReady={onEditorReady} />
       </div>
     </div>
   );

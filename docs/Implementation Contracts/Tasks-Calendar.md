@@ -5,6 +5,19 @@
 **Contract Version:** 2.0 – FINAL  
 **Audience:** Coding AI agents. No deviations permitted. If any instruction is unclear, halt and report – do not assume.
 
+> **📋 AUDIT STATUS (2026-06-16): ~55% MATCH — POST-IMPLEMENTATION, DIVERGED**
+> 
+> This is the **corrected v2 contract**. Implementation completed but codebase evolved:
+> - ✅ All library versions match (react-big-calendar 1.13.0, date-fns 3.6.0, react-dnd 16.0.1, use-debounce 10.0.0)
+> - ✅ Prisma schema matches (Task, CalendarEvent, enums, indexes)
+> - ✅ `TabType` was `"NOTE" | "STACK"` → actual now includes `"TASKS" | "CALENDAR" | "RECORDS"`
+> - ✅ `PendingActionType` doesn't exist (correct per contract)
+> - ⚠️ Store has 10 slices, not 7 — added foldersSlice, pendingMutationSlice, recordsSlice
+> - ⚠️ `lib/api.ts` delegates to `lib/httpClient.ts` (session-aware axios, not raw fetch)
+> - ⚠️ Phase J (FastAPI) marked as owner-only — not verified
+> 
+> See the superseded v1: `Contract_ Tasks & Calendar.md`
+
 ---
 
 ## Pre‑Execution Verification – Owner Must Confirm Before Agent Starts

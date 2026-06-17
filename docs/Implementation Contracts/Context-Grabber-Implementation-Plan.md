@@ -4,6 +4,18 @@
 **Status**: Draft - Pending Discussion  
 **Author**: AI Coding Agent
 
+> **📋 AUDIT STATUS (2026-06-16): ~60% MATCH — IMPLEMENTATION DIVERGED**
+> 
+> The implementation followed this plan's spirit but diverged in structure:
+> - `lib/contextPacker.ts` → actually at `lib/context/packer.ts` (organized into `lib/context/` directory)
+> - `lib/mentionParser.ts` → `extractMentions()` is integrated into ContextPacker class
+> - Multi-tab selection, @mentions, Search API all implemented ✅
+> - FastAPI enrichment endpoint (`/api/v1/context/pack`) — not implemented (frontend-only packing)
+> - The `selectedTabIds` approach was adopted as described ✅
+> - Phases 4 (Backend Enrichment) not implemented as described — FastAPI gets data from frontend only
+> 
+> **This document is useful for:** Understanding the design rationale. See `lib/context/` for actual implementation.
+
 ---
 
 ## 🎯 **Goal Summary**

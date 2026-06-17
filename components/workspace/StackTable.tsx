@@ -191,6 +191,28 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
     return groups;
   }, [rows, sortConfig, filters, groupConfig]);
 
+  // ─── SELECT column autocomplete suggestions ──────────────────────
+  // Scan all rows per SELECT column to build a unique, sorted list of
+  // existing tag values for autocomplete suggestions.
+  const selectSuggestions = useMemo(() => {
+    const suggestions: Record<string, string[]> = {};
+    columns.forEach((col) => {
+      if (col.type === "SELECT") {
+        const uniqueVals = new Set<string>();
+        rows.forEach((row) => {
+          const val = row.data[col.id];
+          if (val && String(val).trim()) {
+            uniqueVals.add(String(val).trim());
+          }
+        });
+        suggestions[col.id] = Array.from(uniqueVals).sort((a, b) =>
+          a.localeCompare(b)
+        );
+      }
+    });
+    return suggestions;
+  }, [columns, rows]);
+
   const addColumn = (type: ColumnType = "TEXT") => {
     const newColumn: StackColumn = {
       id: `temp_col_${Date.now()}`,
@@ -725,7 +747,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
       {/* Table */}
       <div
         ref={tableContainerRef}
-        className="flex-1 overflow-auto relative"
+        className="flex-1 overflow-auto relative scrollbar scrollbar-w-2 scrollbar-thumb-zinc-700/50 hover:scrollbar-thumb-zinc-600 scrollbar-track-transparent"
       >
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10">
@@ -1134,6 +1156,22 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                           >
                             {row.data[col.id] || "Click to link..."}
                           </button>
+                        ) : col.type === "SELECT" ? (
+                          <>
+                            <input
+                              type="text"
+                              list={`select-${col.id}`}
+                              value={row.data[col.id] ?? ""}
+                              onChange={(e) => updateCell(row.id, col.id, e.target.value)}
+                              className="w-full bg-transparent border-none text-sm text-white focus-visible:ring-0 px-1 py-0.5"
+                              placeholder="Select or type..."
+                            />
+                            <datalist id={`select-${col.id}`}>
+                              {selectSuggestions[col.id]?.map((val) => (
+                                <option key={val} value={val} />
+                              ))}
+                            </datalist>
+                          </>
                         ) : (
                           <input
                             type="text"

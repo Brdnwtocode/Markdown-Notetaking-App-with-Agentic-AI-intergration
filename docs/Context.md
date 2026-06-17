@@ -1,5 +1,16 @@
 # Project Context: Markdown Notetaking App with Agentic AI Integration
 
+> **📋 AUDIT STATUS (2026-06-16): UPDATED — ~90% aligned with codebase**
+> 
+> This document has been audited against the actual codebase and updated to reflect:
+> - ChatSidebar replacing AISidebar, aiSlice refactored to chat-based state
+> - 10 Zustand slices (added foldersSlice, pendingMutationSlice, recordsSlice)
+> - New features: Records audio workstation, Context Grabber, Folders, Pending Mutations
+> - Updated dependencies (S3 SDK, use-debounce, react-resizable-panels, etc.)
+> - Current voice pipeline with ContextPacker integration
+> 
+> Remaining minor discrepancies may exist in exact type signatures — refer to source files for definitive details.
+
 ## 1. Project Overview
 This is a full-stack, Next.js-based markdown notetaking application with integrated agentic AI capabilities, real-time voice transcription, task management, calendar scheduling, and structured data stacking (Airtable-like tables). The app targets power users who need unified workspace tools with AI assistance for content creation, organization, and task management.
 
@@ -159,29 +170,91 @@ Defined in `prisma/schema.prisma`, with PostgreSQL as the provider. Key models a
 - `useDeepgramSTT.ts` hook managing WebSocket connection and audio processing
 - Deepgram token generation endpoint for secure API access
 
-### 5.7 Agentic AI Integration
-- `AISidebar.tsx` provides a dedicated AI assistant panel (client-side component with "use client" directive)
-- AI sidebar is a fixed overlay (w-80 md:w-96) on the right side, slides in when `aiReply` state is set
+### 5.7 Agentic AI Integration (ChatSidebar)
+- `ChatSidebar.tsx` provides a dedicated AI assistant panel (client-side component with "use client" directive)
+- Chat sidebar is a fixed overlay (w-80 md:w-96) on the right side, toggled via `isChatOpen` state
 - Uses `ReactMarkdown` to render AI responses with prose styling
-- `aiSlice.ts` manages AI state including `aiReply` (string | null) and `setAiReply` action
-- AI can interact with notes, tasks, stacks, and calendar via API integrations (implied by agentic design)
-- Trigger mechanism: AI reply state is set elsewhere in the app (e.g., voice processing, API responses)
+- `aiSlice.ts` manages chat state including `chatMessages: ChatMessage[]`, `isChatOpen`, `addChatMessage`, `updateChatMessage`, `clearChatMessages`
+- `MessageContext` type carries context items (type, id, title, source) per message
+- AI can interact with notes, tasks, stacks, calendar, and records via API integrations
+- `lib/voice/handleResponseActions.ts` processes AI responses and stages mutations via `pendingMutationSlice`
+
+### 5.8 Context Grabber System
+- `lib/context/packer.ts` — `ContextPacker` class collects context from tabs, @mentions, and recent activity
+- `lib/context/types.ts` — Type definitions: `ContextItem`, `PackedContext`, `ContextPackerOptions`
+- `lib/context/dataFormatter.ts` — Formats stack data as CSV/Markdown for efficient AI token usage
+- `lib/context/commandDetector.ts` — Command detection utilities
+- Multi-tab selection via `selectedTabIds` in `uiSlice` with checkboxes in `TabBar.tsx`
+- @mention parsing via `extractMentions()` integrated into `PushToTalk` and `ChatSidebar`
+- Search API at `app/api/search/route.ts` for @mention material lookup
+- Sends `packed_context` to FastAPI via `POST /api/v1/voice/process`
+
+### 5.9 Records Feature (Audio Workstation)
+- `BackgroundRecorder.tsx` — Persistent mic + STT in workspace layout (never unmounts)
+- `RecordsWorkstation.tsx` — Full audio workstation UI with waveform, transcript, playback
+- `WaveformVisualizer.tsx` — Canvas-based real-time waveform (60fps, Emerald #10B981)
+- `AgenticAutomatePanel.tsx` — AI orchestration: summarize, extract tasks, populate stacks
+- `CaptureQueue.tsx` — Recording sessions table + audio file import drop zone
+- `useContinuousSTT.ts` — Long-form Deepgram STT via WebSocket (linear16 PCM)
+- `Recording` model in Prisma with `RecordStatus` enum (RECORDING/TRANSCRIBING/RESOLVING/COMMITTED)
+- Audio storage via S3/MinIO (`lib/storage.ts`)
+- Agentic Automate results staged via `pendingMutationSlice` with `type: "automate_results"`
+
+### 5.10 Folders Module
+- Hierarchical folder system (`Folder` model with self-referential `parentId`)
+- Notes and Stacks can be organized into folders (`folderId` foreign key)
+- `foldersSlice.ts` manages folder state with optimistic create/rename/move
+- Folder API at `/api/folders`
+
+### 5.11 Pending Mutation / Suggestion System
+- `pendingMutationSlice.ts` — Stages AI-suggested changes before user approval
+- `PendingMutation` discriminated union covering: update_note, add_stack_row, create_task, create_calendar_event, bulk_update_stack, manage_tasks, summarize_context, create_note, automate_results
+- `UniversalConfirmationToast.tsx` — Renders Accept/Discard buttons for pending mutations
+- `DiffOverlay` in `LiveEditor.tsx` — Red/green inline diff for note suggestions
+- Ghost rows in `StackTable.tsx` — Yellow-tinted preview rows for stack additions
 
 ## 6. Existing Documentation & Reports
 Located in `docs/` and `reports/`:
-- `AI_MICROSERVICE_CONTRACT.md`: Contract for AI microservice integration
-- `Contract_Tasks & Calendar.md`: Task and calendar module contracts
-- `Implementation Contracts/`: Deepgram STT, Tasks-Calendar implementation details
-- Progress reports: Auth, UI theming, voice, React integration, validation, security audit
-- `DESIGN.md`, `SETUP.md`, `INSTALLATION.md`: High-level design and setup guides
+
+### Active Contracts (up to date):
+- `NextJS-AI-Context-Format.md` — Current voice/context format spec for FastAPI team
+- `Implementation Contracts/Real Time STT by Deepgram.md` — STT architecture & implementation
+- `Implementation Contracts/FastAPI-Context-Processing-Contract.md` — FastAPI context processing spec
+- `Implementation Contracts/AI-Suggestion-UI-Plan.md` — AI suggestion/diff UI spec
+- `Records-Feature/FastAPI-Agentic-Automate-Contract.md` — Records Automate FastAPI contract
+- `Records-Feature/IMPLEMENTATION.md` — Records feature implementation reference
+
+### Superseded / Outdated (see audit headers):
+- `AI_MICROSERVICE_CONTRACT.md` — ⚠️ ~90% outdated, superseded
+- `Contract_ Tasks & Calendar.md` — ⚠️ ~80% outdated, superseded by TDC
+- `Implementation Contracts/FastAPI-Context-Enrichment-Contract.md` — ⚠️ DUPLICATE of FastAPI-Context-Processing-Contract.md
+
+### Design Documents:
+- `TDC-Tasks-Calendar-v1.md` — Original implementation contract (post-implementation, see audit header)
+- `Context-Grabber-Layer/` — Design proposals for context grabber architecture
+- `Records-Feature/UI-Initial-Design` — Visual design spec for Records workstation
+
+### Competitive Analysis & Reports:
+- `Comparison-Notion-Obsidian-LockIn.md`, `Competitive-Comparison-Notion-Obsidian.md`
+- `reports/` — Progress reports (Auth, UI, Voice, React, Validation, Security)
 
 ## 7. State Management Architecture (Zustand)
 The app uses **Zustand** (not Redux Toolkit) for state management, with a modular slice pattern:
 - `lib/store.ts` creates a combined `useWorkspaceStore` using Zustand's `create` function
-- Each slice (`notesSlice`, `stacksSlice`, `voiceSlice`, `uiSlice`, `aiSlice`, `tasksSlice`, `calendarSlice`) is a factory function that returns its portion of the store
+- **10 slices** compose the store:
+  - `notesSlice.ts` — Note CRUD, note cache, optimistic mutations
+  - `stacksSlice.ts` — Stack CRUD, row operations, optimistic mutations
+  - `foldersSlice.ts` — Folder hierarchy, expand/collapse, optimistic create/rename/move
+  - `voiceSlice.ts` — Recording state (`isRecording`, `recordingTranscript`)
+  - `uiSlice.ts` — Tabs (`openTabs`, `activeTabId`, `selectedTabIds`), sync state, cursor, scroll positions
+  - `aiSlice.ts` — Chat messages (`chatMessages`, `isChatOpen`, `MessageContext`)
+  - `tasksSlice.ts` — Task CRUD, flat list + client-side tree building
+  - `calendarSlice.ts` — Calendar events, date-range-based fetching
+  - `pendingMutationSlice.ts` — AI suggestion staging (`stageMutation`, `confirmMutation`, `discardMutation`)
+  - `recordsSlice.ts` — Recording lifecycle, transcript streaming, Agentic Automate results, local recordings
 - The `RootStore` type is an intersection of all slice types
-- Store also re-exports TypeScript types from each slice for use throughout the app
-- Key store types: `Note`, `Stack`, `StackColumn`, `StackRow`, `OpenTab`, `TabType`, `SyncState`, `PendingAction`, `Task`, `TaskStatus`, `TaskPriority`, `CalendarEvent`
+- `store/useStore.ts` re-exports `useWorkspaceStore` and all types from `lib/store.ts`
+- Key store types: `Note`, `Stack`, `StackColumn`, `StackRow`, `Folder`, `OpenTab`, `TabType`, `SyncState`, `ChatMessage`, `MessageStatus`, `MessageContext`, `PendingMutation`, `MutationStatus`, `Task`, `TaskStatus`, `TaskPriority`, `CalendarEvent`, `Recording`, `RecordStatus`, `LocalRecording`
 
 ## 8. API Patterns & Conventions
 All API routes follow Next.js App Router conventions and use NextAuth.js session validation:
@@ -213,15 +286,26 @@ if (!session?.user?.id) {
 - OAuth providers and email verification supported (User model has `emailVerified` field)
 - Custom `next-auth.d.ts` in `types/` extends NextAuth types for TypeScript support
 
-## 10. Voice Processing Pipeline
-1. **User Action**: `PushToTalk.tsx` component triggers voice recording
+## 10. Voice & Context Processing Pipeline
+1. **User Action**: `PushToTalk.tsx` component triggers voice recording (Ctrl+Space)
 2. **Audio Capture**: Browser audio API captures microphone input
 3. **Processing**: `pcm-processor.js` worklet processes raw PCM audio
-4. **WebSocket Connection**: `useDeepgramSTT.ts` hook manages Deepgram WebSocket connection
-5. **Real-time STT**: Audio streamed to Deepgram, transcription returned in real-time
-6. **Token Security**: `/api/deepgram/token` endpoint generates secure Deepgram API tokens
-7. **Voice API**: `lib/voiceApi.ts` provides helper functions for voice processing
-8. **State Management**: `voiceSlice.ts` tracks voice input state in Zustand store
+4. **WebSocket Connection**: `useDeepgramSTT.ts` hook manages Deepgram WebSocket connection (nova-3 model)
+5. **Real-time STT**: Audio streamed to Deepgram, interim + final transcription returned in real-time
+6. **Token Security**: `/api/deepgram/token` endpoint mints short-lived (30s) Deepgram tokens
+7. **Context Packing**: `ContextPacker` collects active tab(s) + @mentions → `packed_context`
+8. **BFF Proxy**: `app/api/voice/process/route.ts` authenticates, builds FormData, forwards to FastAPI
+9. **FastAPI Processing**: LLM processes transcript + context → returns structured actions
+10. **Response Handling**: `lib/voice/handleResponseActions.ts` processes actions → stages mutations
+11. **User Approval**: `UniversalConfirmationToast` shows Accept/Discard for suggested changes
+12. **State Management**: `voiceSlice.ts` + `aiSlice.ts` + `pendingMutationSlice.ts` manage state
+
+### Continuous (Background) Recording
+- `BackgroundRecorder.tsx` + `useContinuousSTT.ts` provide long-form recording
+- Linear16 PCM audio sent to Deepgram WebSocket
+- Supports pause/resume and accumulates `speech_final` segments
+- Fallback: batch upload via `/api/voice/process` if WebSocket fails
+- Live transcript streamed to `recordsSlice.liveTranscript`
 
 ## 11. Workspace Layout & Navigation
 - `(workspace)` route group provides authenticated layout with sidebar navigation
@@ -263,6 +347,15 @@ if (!session?.user?.id) {
 - `react-dnd`, `react-dnd-html5-backend`: ^16.0.1 (drag-and-drop for stacks/tasks)
 - `date-fns`: ^3.6.0 (date utilities for calendar)
 - `axios`: ^1.6.0 (HTTP client for API calls)
+- `use-debounce`: ^10.0.0 (debounced calendar range fetching)
+- `react-resizable-panels`: ^0.0.55 (resizable layout panels)
+- `reactflow`: ^11.10.0 (node-based workflow visualization)
+- `recharts`: ^2.10.0 (charting library)
+
+### Storage
+- `@aws-sdk/client-s3`: ^3.1067.0 (S3/MinIO client for audio storage)
+- `@aws-sdk/lib-storage`: ^3.1067.0 (S3 upload utilities)
+- `@aws-sdk/s3-request-presigner`: ^3.1067.0 (S3 presigned URL generation)
 
 ### Form Handling
 - `react-hook-form`: ^7.48.0, `@hookform/resolvers`: ^3.3.0

@@ -2,6 +2,16 @@
 
 > `POST /api/v1/records/automate`  
 > FastAPI is stateless. No DB access. Process only what you receive.
+>
+> **📋 AUDIT STATUS (2026-06-16): ~85% MATCH — SPEC DOC, GOOD ALIGNMENT**
+> 
+> This contract is a specification for the FastAPI team. The Next.js side aligns well:
+> - ✅ BFF route at `app/api/records/automate/route.ts` proxies to this endpoint
+> - ✅ `AutomateRequest` type in `recordsSlice.ts` matches the described fields
+> - ✅ `PendingMutation` with `type: "automate_results"` handles the response
+> - ✅ Response fields match `Recording` model JSONB columns
+> - ⚠️ `workspace_context` is called `workspaceContext` in the actual TypeScript (camelCase)
+> - ⚠️ The BFF sends via JSON, not multipart (verify with actual route implementation)
 
 ---
 

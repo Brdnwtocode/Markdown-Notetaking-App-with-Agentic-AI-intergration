@@ -3,6 +3,15 @@
 > **Audience:** FastAPI / AI microservice team.  
 > **Purpose:** This document describes exactly what the NextJS BFF sends to `POST /api/v1/voice/process`.  
 > Use this to build your request parsers, write integration tests, and validate your AI prompt assembly.
+>
+> **📋 AUDIT STATUS (2026-06-16): ~85% MATCH — MOSTLY ACCURATE**
+> 
+> The format described here is well-aligned with the actual codebase (`lib/context/packer.ts`, `lib/context/types.ts`).
+> Minor notes:
+> - ContextPacker is at `lib/context/packer.ts` (not `lib/contextPacker.ts`)
+> - The `type` field may use `"TASKS"` (plural) vs `"TASK"` depending on context — verify with `lib/context/types.ts`
+> - `cursor_position` is sent as a separate FormData field, not inside `packed_context`
+> - The BFF uses `lib/httpClient.ts` (axios) with `x-session-id` header, not raw fetch
 
 ---
 

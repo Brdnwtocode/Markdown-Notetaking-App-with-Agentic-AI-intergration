@@ -4,6 +4,14 @@
 **Status**: Redesign Proposal  
 **Author**: AI Coding Agent
 
+> **📋 AUDIT STATUS (2026-06-16): DESIGN PROPOSAL — NOT IMPLEMENTED**
+> 
+> This is the most radical redesign proposal — sending only the focused cell instead of row data.
+> The actual implementation takes a middle-ground approach: sends full data (CSV/Markdown) but limits rows.
+> 
+> The `focusedCell` / `focusedTarget` concepts are NOT in the current implementation.
+> This document is valuable as an optimization direction for future iterations.
+
 ---
 
 ## 🚨 The Core Problem

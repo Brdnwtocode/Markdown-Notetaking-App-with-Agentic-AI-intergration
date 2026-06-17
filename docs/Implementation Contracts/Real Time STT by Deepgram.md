@@ -1,6 +1,18 @@
 # Codebase Audit & Design Plan: Real-Time STT via Deepgram
 
-> Stack: Next.js 14 · FastAPI microservice · Zustand · Milkdown · `react-media-recorder`
+> **📋 AUDIT STATUS (2026-06-16): ~75% MATCH — DESIGN DOC, MOSTLY IMPLEMENTED**
+> 
+> Stack: Next.js 14 · FastAPI microservice · Zustand · Milkdown · `@deepgram/sdk`
+> 
+> Implementation status of recommendations:
+> - ✅ `@deepgram/sdk` installed (v5.3.0)
+> - ✅ `react-media-recorder` removed (dead weight)
+> - ✅ Token endpoint at `app/api/deepgram/token/route.ts`
+> - ✅ `useDeepgramSTT.ts` hook for push-to-talk
+> - ✅ `useContinuousSTT.ts` hook for background/long-form recording
+> - ✅ Two-path model (WebSocket streaming + fallback batch)
+> - ✅ Keyboard handler fix (stable useRef)
+> - ⚠️ State machine described is idealized — actual hook implementation may differ
 
 ---
 

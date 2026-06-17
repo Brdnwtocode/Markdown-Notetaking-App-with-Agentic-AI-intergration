@@ -2,6 +2,17 @@ As a user, when the AI proposes a modification to an existing note, I want to re
 the change as an inline red/green diff and explicitly accept or discard it before
 anything is written to the database.
 
+> **📋 AUDIT STATUS (2026-06-16): ~85% MATCH — MOSTLY IMPLEMENTED AS SPECIFIED**
+> 
+> The described UI behavior is implemented:
+> - ✅ `stageMutation()` in `pendingMutationSlice` with `type: "update_note"`
+> - ✅ `DiffOverlay` component in `LiveEditor.tsx` using `diff.diffWordsWithSpace()`
+> - ✅ Red/green diff styling with strikethrough
+> - ✅ Accept/Discard buttons via `UniversalConfirmationToast`
+> - ✅ Read-only Milkdown editor while diff is pending
+> - ✅ Ghost row UI in `StackTable.tsx` for `type: "add_stack_row"`
+> - ⚠️ Enter/Escape keys behavior — verify if these were actually removed per spec
+
 ## Acceptance Criteria (Updated with Codebase Details)
 - The AI produces a proposed note which is stored using `stageMutation()` in `pendingMutationSlice` with `type: "update_note"`; the database is NOT mutated at this point.
 - The note uses the existing `DiffOverlay` component in `LiveEditor.tsx`, which already implements diffing using the `diff` npm library (already installed: "diff": "^9.0.0") via `diff.diffWordsWithSpace()`.

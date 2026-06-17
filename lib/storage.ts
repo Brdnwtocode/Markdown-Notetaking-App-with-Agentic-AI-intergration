@@ -29,6 +29,7 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   type PutObjectCommandInput,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -101,21 +102,25 @@ export interface UploadResult {
 /**
  * Upload a buffer or stream to S3-compatible storage.
  *
- * @param body      - The file content (Buffer, Blob, ReadableStream, etc.)
- * @param fileName  - Original filename (used to derive content-type and key)
- * @param folder    - Logical folder prefix (e.g. "records", "images", "docs")
+ * @param body       - The file content (Buffer, Blob, ReadableStream, etc.)
+ * @param fileName   - Original filename (used to derive content-type and key)
+ * @param folder     - Logical folder prefix (e.g. "records", "images", "videos").
+ *                     If omitted, auto-detected from MIME type via {@link getFolderByMimeType}.
  * @param contentType - MIME type override (auto-detected from extension if omitted)
  */
 export async function uploadFile(
   body: PutObjectCommandInput["Body"],
   fileName: string,
-  folder: string = "records",
+  folder?: string,
   contentType?: string,
 ): Promise<UploadResult> {
   const bucket = getBucket();
   const ext = fileName.split(".").pop()?.toLowerCase() || "bin";
-  const key = `${folder}/${randomUUID()}.${ext}`;
   const mime = contentType || mimeFromExt(ext);
+
+  // Auto-detect logical folder from MIME type if not explicitly provided
+  const resolvedFolder = folder || getFolderByMimeType(mime);
+  const key = `${resolvedFolder}/${randomUUID()}.${ext}`;
 
   console.log("[storage] Uploading to bucket:", bucket, "key:", key, "mime:", mime);
 
@@ -259,7 +264,87 @@ export async function ensureBucket(bucketName?: string): Promise<void> {
   }
 }
 
+/**
+ * List all object keys under a prefix (paginated).
+ * Used by the orphan image sweep job.
+ */
+export async function listObjects(
+  prefix: string,
+  maxKeys: number = 1000,
+): Promise<string[]> {
+  const bucket = getBucket();
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const command = new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+      MaxKeys: Math.min(maxKeys, 1000),
+      ContinuationToken: continuationToken,
+    });
+
+    const result = await client().send(command);
+
+    if (result.Contents) {
+      for (const obj of result.Contents) {
+        if (obj.Key) keys.push(obj.Key);
+      }
+    }
+
+    continuationToken = result.NextContinuationToken;
+  } while (continuationToken && keys.length < maxKeys);
+
+  return keys;
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Map a MIME type to a logical storage folder prefix.
+ *
+ *   audio/*     → "audio"
+ *   image/*     → "images"
+ *   video/*     → "videos"
+ *   application/pdf, doc*, xls*, csv, txt, md, json, xml, zip → "documents"
+ *   everything else → "other"
+ */
+export function getFolderByMimeType(mimeType: string): string {
+  if (!mimeType) return "other";
+
+  const [type] = mimeType.split("/");
+
+  switch (type) {
+    case "audio":
+      return "audio";
+    case "image":
+      return "images";
+    case "video":
+      return "videos";
+    case "text":
+      return "documents";
+    case "application": {
+      // Application subtypes that are document-like
+      const documentSubtypes = [
+        "pdf", "msword",
+        "vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "vnd.ms-excel",
+        "vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "csv", "json", "xml", "zip",
+        "vnd.oasis.opendocument.text",
+        "vnd.oasis.opendocument.spreadsheet",
+        "rtf",
+      ];
+      const subtype = mimeType.split("/")[1]?.toLowerCase();
+      if (subtype && documentSubtypes.some((d) => subtype === d || subtype.startsWith(d))) {
+        return "documents";
+      }
+      return "other";
+    }
+    default:
+      return "other";
+  }
+}
 
 function mimeFromExt(ext: string): string {
   const map: Record<string, string> = {

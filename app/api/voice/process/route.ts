@@ -2,8 +2,52 @@ import { auth } from "@/app/auth";
 import { NextRequest, NextResponse } from "next/server";
 import type { VoiceResponse } from "../../../../types/voice";
 import { assertMutualExclusivity } from "../../../../types/voice";
+import { getDownloadUrl } from "@/lib/storage";
 
 export const maxDuration = 60; // Vercel serverless function timeout
+
+// ─── Image URL Resolution ────────────────────────────────────────────────────
+//
+// Before sending note content to the AI model, resolve every
+// `/api/images/{noteId}/{key}` reference to a signed S3 download URL.
+// The model can then fetch images directly. The render path is untouched —
+// `<img src="/api/images/...">` lets the browser follow the redirect natively.
+
+const IMAGE_REF_REGEX = /\/api\/images\/([^/]+)\/([^)\s"']+)/g;
+
+/**
+ * Resolve all `/api/images/{noteId}/{key}` references in a string
+ * to signed S3 download URLs (7-day expiry). Returns the modified string.
+ */
+async function resolveImageRefsInText(text: string): Promise<string> {
+  const matches: Array<{ full: string; noteId: string; key: string }> = [];
+  let match;
+  while ((match = IMAGE_REF_REGEX.exec(text)) !== null) {
+    matches.push({ full: match[0], noteId: match[1], key: match[2] });
+  }
+
+  if (matches.length === 0) return text;
+
+  // Resolve all refs in parallel
+  const resolutions = await Promise.allSettled(
+    matches.map(async (m) => {
+      const s3Key = `notes/${m.noteId}/${m.key}`;
+      const signedUrl = await getDownloadUrl(s3Key, 3600 * 24 * 7);
+      return { full: m.full, signedUrl };
+    })
+  );
+
+  let result = text;
+  for (const r of resolutions) {
+    if (r.status === "fulfilled") {
+      result = result.replace(r.value.full, r.value.signedUrl);
+    }
+    // If a single resolution fails, keep the original reference — the
+    // AI model will see a broken URL instead of crashing.
+  }
+
+  return result;
+}
 
 /**
  * Backend-For-Frontend (BFF) Proxy for Voice Processing
@@ -55,7 +99,10 @@ export async function POST(request: NextRequest) {
 
     // Handle packed_context (new) or legacy single context (backward compatible)
     if (packedContextStr) {
-      fastApiFormData.append("packed_context", packedContextStr);
+      // Resolve image references before forwarding to FastAPI so the AI model
+      // receives usable signed URLs instead of relative /api/images/... paths.
+      const resolvedContext = await resolveImageRefsInText(packedContextStr);
+      fastApiFormData.append("packed_context", resolvedContext);
       // NOTE: note_state is intentionally NOT forwarded when packed_context is present —
       // the full note content is already inside packed_context.items[0].content.
       // Sending both would double-pack the note and waste tokens.
@@ -65,7 +112,8 @@ export async function POST(request: NextRequest) {
       fastApiFormData.append("context_id", contextId);
       // Legacy: only send note_state when packed_context is absent
       if (noteState) {
-        fastApiFormData.append("note_state", noteState);
+        const resolvedNoteState = await resolveImageRefsInText(noteState);
+        fastApiFormData.append("note_state", resolvedNoteState);
       }
     }
     

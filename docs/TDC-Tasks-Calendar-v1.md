@@ -4,6 +4,28 @@
 **Contract Version:** 1.0 — FINAL  
 **Audience:** Coding AI agents. Execute exactly as written. No design decisions permitted. No deviations. If a specification is unclear, halt and report — do not assume.
 
+> **📋 AUDIT STATUS (2026-06-16): ~55% MATCH — POST-IMPLEMENTATION, DIVERGED**
+> 
+> This contract was the **implementation blueprint**. The features have been implemented but the codebase has evolved beyond this spec:
+> 
+> **Matches codebase:**
+> - Prisma schema (Task, CalendarEvent, enums, indexes) — ✅ implemented as specified
+> - API routes (tasks, calendar) — ✅ implemented
+> - Library versions (react-big-calendar, date-fns, react-dnd, use-debounce) — ✅ installed
+> - Store refactor pattern (StateCreator, slice composition) — ✅ applied
+> 
+> **Diverged from spec (codebase is MORE than the contract):**
+> - 7 slices specified → **10 slices actual** (added foldersSlice, pendingMutationSlice, recordsSlice)
+> - `TabType` was `"NOTE" | "STACK"` → actual is `"NOTE" | "STACK" | "TASKS" | "CALENDAR" | "RECORDS"`
+> - `PendingActionType` doesn't exist (correct) — but `PendingAction` was replaced by `PendingMutation` in its own slice
+> - `aiSlice` now has chat messages, not `aiReply`/`pendingAction`
+> - Voice integration has ContextPacker, not simple single-context
+> - `lib/api.ts` exists but delegates to `lib/httpClient.ts` (session-aware axios)
+> - The `store/useStore.ts` re-exports from `lib/store.ts` as specified ✅
+> 
+> **This document is valuable for:** Understanding the original design intent and how it was executed.
+> **Not for:** Current implementation reference — use the source code directly.
+
 ---
 
 ## SECTION 0 — GROUND RULES FOR THE EXECUTING AGENT

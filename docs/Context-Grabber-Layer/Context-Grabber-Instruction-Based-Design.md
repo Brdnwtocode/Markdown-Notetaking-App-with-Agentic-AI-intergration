@@ -4,6 +4,13 @@
 **Status**: Alternative Design Proposal  
 **Author**: AI Coding Agent
 
+> **📋 AUDIT STATUS (2026-06-16): DESIGN PROPOSAL — NOT IMPLEMENTED AS-IS**
+> 
+> This is an **alternative design proposal**, not a contract. It explores sending minimal instructions instead of full data.
+> The actual implementation (`lib/context/packer.ts`) sends full data (CSV/Markdown) with column schema, not just instructions.
+> 
+> This document is valuable as design rationale but does not reflect the implemented approach.
+
 ---
 
 ## 🚨 Rethinking the Approach
