@@ -4,7 +4,9 @@
 // recording lifecycle, transcript streaming, and Agentic Automate results.
 
 import { StateCreator } from "zustand";
+import { toast } from "@/lib/toast";
 import { RootStore } from "@/lib/store";
+import axios from "axios";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -20,6 +22,7 @@ export interface Recording {
   audioKey: string | null;
   audioSizeBytes: number | null;
   errorLog: string | null;
+  folderId: string | null;
   noteMutation: any | null;
   taskMutations: any[] | null;
   stackMutation: any | null;
@@ -99,6 +102,7 @@ export interface CalendarMutationResult {
 }
 
 export interface AutomateResponse {
+  transcript?: string;
   noteMutation?: NoteMutationResult | null;
   taskMutations?: TaskMutationResult[];
   stackMutation?: StackMutationResult | null;
@@ -166,13 +170,14 @@ export interface RecordsSlice {
   updateRecordingStatus: (id: string, status: RecordStatus) => void;
   updateRecordingTranscript: (id: string, transcript: string) => void;
   updateRecordingDuration: (id: string, sec: number) => void;
+  moveRecording: (recordingId: string, folderId: string | null) => Promise<void>;
 
   // Actions — Agentic Automate
   setAutomateLoading: (v: boolean) => void;
   setAutomateResult: (result: AutomateResponse | null) => void;
 }
 
-export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> = (set) => ({
+export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> = (set, get) => ({
   // Recording state
   isRecording: false,
   isPaused: false,
@@ -209,10 +214,10 @@ export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> =
     set((s) => ({ liveTranscript: s.liveTranscript + chunk })),
   setLiveTranscript: (t) => set({ liveTranscript: t }),
   resetRecordingState: () =>
-    set({
+    set((s) => ({
       isRecording: false,
       isPaused: false,
-      sttEnabled: true,
+      // Preserve the user's STT preference across sessions — don't force it back to true
       recordingId: null,
       recordingTitle: "Untitled Recording",
       recordingDurationSec: 0,
@@ -220,7 +225,7 @@ export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> =
       isPlaying: false,
       playbackSpeed: 1,
       currentPlaybackTime: 0,
-    }),
+    })),
 
   // ─── Playback ─────────────────────────────────────────────────────────
   setIsPlaying: (v) => set({ isPlaying: v }),
@@ -265,6 +270,22 @@ export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> =
         r.id === id ? { ...r, durationSec: sec } : r,
       ),
     })),
+
+  moveRecording: async (recordingId, folderId) => {
+    const prev = get().recordings;
+    // Optimistic update
+    set({
+      recordings: prev.map((r) =>
+        r.id === recordingId ? { ...r, folderId } : r
+      ),
+    });
+    try {
+      await axios.patch(`/api/records/${recordingId}`, { folderId });
+    } catch {
+      set({ recordings: prev });
+      toast.error("Failed to move recording");
+    }
+  },
 
   // ─── Agentic Automate ─────────────────────────────────────────────────
   setAutomateLoading: (v) => set({ automateLoading: v }),
