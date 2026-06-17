@@ -24,6 +24,13 @@ import {
 } from "lucide-react";
 import { toast } from "@/lib/toast";
 
+// Module-level audio URL cache — persists across tab switches.
+// Maps recording ID → presigned audio URL. URLs expire after ~1 hour
+// but tab switching within a session benefits from instant restore.
+const audioUrlCache = new Map<string, string>();
+// Module-level flag: once recordings have been fetched, skip re-fetch
+let recordingsFetched = false;
+
 export default function RecordsWorkstation() {
   const store = useWorkspaceStore();
   const {
@@ -62,11 +69,19 @@ export default function RecordsWorkstation() {
 
   // ─── Load persisted recordings ─────────────────────────────────────────
   useEffect(() => {
+    // Already fetched (either by pre-fetcher or previous tab visit)
+    if (recordingsFetched || recordings.length > 0) {
+      if (recordings.length > 0) recordingsFetched = true; // pre-fetcher populated them
+      setRecordingsLoading(false);
+      return;
+    }
+
     (async () => {
       setRecordingsLoading(true);
       try {
         const res = await fetch("/api/records");
         if (res.ok) setRecordings(await res.json());
+        recordingsFetched = true;
       } catch { /* silent */ }
       finally { setRecordingsLoading(false); }
     })();
@@ -80,15 +95,24 @@ export default function RecordsWorkstation() {
     if (!activeRecordingId) return;
     const rec = recordings.find((r) => r.id === activeRecordingId);
     if (!rec) return;
-    // Skip if already loaded (avoid re-fetching during save flow)
+
     setLiveTranscript(rec.transcript || "");
     setHasUnsavedRecording(false);
+
     if (rec.audioKey) {
+      // Check module-level cache first — prevents re-fetch on tab switch
+      const cachedUrl = audioUrlCache.get(rec.id);
+      if (cachedUrl) {
+        setAudioUrl(cachedUrl);
+        return;
+      }
+
       (async () => {
         try {
           const res = await fetch(`/api/records/${rec.id}/audio`);
           if (res.ok) {
             const { url } = await res.json();
+            audioUrlCache.set(rec.id, url);
             setAudioUrl(url);
           } else {
             setAudioUrl(null);
@@ -298,16 +322,23 @@ export default function RecordsWorkstation() {
         {/* ═══════════ MAIN PANEL ═══════════ */}
         <Panel defaultSize={55} minSize={35}>
           <div className="flex flex-col h-full min-w-0">
-        {/* Sentinel status */}
+        {/* Status bar */}
         <div className="flex items-center justify-between px-4 py-2 border-b border-[#27272A] bg-[#131313]">
           <div className="flex items-center gap-3">
-            <span className="relative flex h-2 w-2">
-              <span className={`${isRecording && !isPaused ? "animate-pulse" : ""} absolute inline-flex h-full w-full rounded-full opacity-75 ${isRecording ? "bg-[#10B981]" : "bg-zinc-600"}`} />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]" />
-            </span>
-            <span className="text-[10px] font-mono font-semibold tracking-widest text-zinc-400 uppercase">
-              {isRecording ? (isPaused ? "SENTINEL PAUSED" : "SENTINEL ACTIVE") : hasUnsavedRecording ? "UNSAVED RECORDING" : "SENTINEL STANDBY"}
-            </span>
+            {isRecording && (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className={`${isRecording && !isPaused ? "animate-pulse" : ""} absolute inline-flex h-full w-full rounded-full opacity-75 bg-[#10B981]`} />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#10B981]" />
+                </span>
+                <span className="text-[10px] font-mono font-semibold tracking-widest text-zinc-400 uppercase">
+                  {isPaused ? "SENTINEL PAUSED" : "SENTINEL ACTIVE"}
+                </span>
+              </>
+            )}
+            {!isRecording && hasUnsavedRecording && (
+              <span className="text-[10px] font-mono font-semibold tracking-widest text-amber-400 uppercase">UNSAVED RECORDING</span>
+            )}
           </div>
           {isRecording && (
             <div className="flex items-center gap-2 text-[10px] font-mono text-[#10B981]">
@@ -334,11 +365,20 @@ export default function RecordsWorkstation() {
           )}
         </div>
 
-        {/* Waveform */}
-        <div className="px-3 pt-3">
-          <WaveformVisualizer isActive={isRecording || isPlaying} volume={0.5} height={100}
-            playbackProgress={audioRef.current?.duration ? currentPlaybackTime / audioRef.current.duration : undefined} />
-        </div>
+        {/* Waveform — only visible while recording */}
+        {isRecording && (
+          <div className="px-3 pt-3">
+            <div className="flex items-center justify-center gap-2 pb-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-red-500" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+              </span>
+              <span className="text-sm font-mono font-semibold text-red-400 tracking-wider tabular-nums">{durationStr}</span>
+            </div>
+            <WaveformVisualizer isActive={isRecording} volume={0.5} height={100}
+              playbackProgress={audioRef.current?.duration ? currentPlaybackTime / audioRef.current.duration : undefined} />
+          </div>
+        )}
 
         {/* Toolbar */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-[#27272A] flex-wrap">

@@ -30,10 +30,20 @@ export interface UploadingFile {
 
 export interface FileRecordsSlice {
   fileRecords: FileRecord[];
+  /** Cache of individually fetched file records — prevents re-fetch on tab switch */
+  fileRecordCache: Record<string, FileRecord>;
+  /** Cache of file content text — prevents content re-fetch on tab switch */
+  fileContentCache: Record<string, string>;
   uploadingFiles: UploadingFile[];
   setFileRecords: (records: FileRecord[]) => void;
   addFileRecord: (record: FileRecord) => void;
   removeFileRecord: (id: string) => void;
+  /** Adds/updates a single file record in the cache (used by viewers after fetch) */
+  cacheFileRecord: (record: FileRecord) => void;
+  /** Store file content in the cache so it persists across tab switches */
+  cacheFileContent: (fileId: string, content: string) => void;
+  /** Move a file to a different folder */
+  moveFileRecord: (fileId: string, folderId: string | null) => Promise<void>;
   fetchFileRecords: () => Promise<void>;
   startUpload: (tempId: string, fileName: string, folderId: string | null) => void;
   finishUpload: (tempId: string, record: FileRecord) => void;
@@ -51,6 +61,8 @@ export interface FileRecordsSlice {
 
 export const createFileRecordsSlice: StateCreator<RootStore, [], [], FileRecordsSlice> = (set, get) => ({
   fileRecords: [],
+  fileRecordCache: {},
+  fileContentCache: {},
   uploadingFiles: [],
 
   setFileRecords: (records) => set({ fileRecords: records }),
@@ -62,6 +74,32 @@ export const createFileRecordsSlice: StateCreator<RootStore, [], [], FileRecords
     set((state) => ({
       fileRecords: state.fileRecords.filter((r) => r.id !== id),
     })),
+
+  cacheFileRecord: (record) =>
+    set((state) => ({
+      fileRecordCache: { ...state.fileRecordCache, [record.id]: record },
+    })),
+
+  cacheFileContent: (fileId, content) =>
+    set((state) => ({
+      fileContentCache: { ...state.fileContentCache, [fileId]: content },
+    })),
+
+  moveFileRecord: async (fileId, folderId) => {
+    const prev = get().fileRecords;
+    // Optimistic update
+    set({
+      fileRecords: prev.map((r) =>
+        r.id === fileId ? { ...r, folderId } : r
+      ),
+    });
+    try {
+      await axios.patch(`/api/storage/${fileId}`, { folderId });
+    } catch {
+      set({ fileRecords: prev });
+      toast.error("Failed to move file");
+    }
+  },
 
   fetchFileRecords: async () => {
     try {

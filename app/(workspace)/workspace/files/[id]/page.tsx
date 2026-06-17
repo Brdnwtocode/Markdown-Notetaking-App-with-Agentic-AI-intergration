@@ -17,14 +17,14 @@ export default function FileViewerPage() {
   const params = useParams();
   const router = useRouter();
   const fileId = params.id as string;
-  const { fileRecords, openTab } = useWorkspaceStore();
+  const { fileRecords, fileRecordCache, cacheFileRecord, openTab } = useWorkspaceStore();
   const [fileRecord, setFileRecord] = useState<FileRecord | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Try cached first
-    const cached = fileRecords.find((fr) => fr.id === fileId);
+    // 1. Check cache first (persists across tab switches)
+    const cached = fileRecordCache[fileId];
     if (cached) {
       setFileRecord(cached);
       openTab(fileId, "FILE", cached.fileName);
@@ -32,15 +32,26 @@ export default function FileViewerPage() {
       return;
     }
 
+    // 2. Check fileRecords array (populated by sidebar)
+    const fromList = fileRecords.find((fr) => fr.id === fileId);
+    if (fromList) {
+      setFileRecord(fromList);
+      cacheFileRecord(fromList);
+      openTab(fileId, "FILE", fromList.fileName);
+      setLoading(false);
+      return;
+    }
+
+    // 3. Fetch from API
     let cancelled = false;
     (async () => {
       try {
-        // Fetch the full file listing and find the matching record
         const listRes = await axios.get("/api/storage");
         if (cancelled) return;
         const found = (listRes.data as FileRecord[]).find((fr: FileRecord) => fr.id === fileId);
         if (found) {
           setFileRecord(found);
+          cacheFileRecord(found);
           openTab(fileId, "FILE", found.fileName);
         } else {
           setError("File not found");

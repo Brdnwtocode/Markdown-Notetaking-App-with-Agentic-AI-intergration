@@ -8,6 +8,7 @@ import ChatSidebar from "@/components/workspace/ChatSidebar";
 import WorkspaceUserSync from "@/components/workspace/WorkspaceUserSync";
 import UniversalConfirmationToast from "@/components/workspace/UniversalConfirmationToast";
 import BackgroundRecorder from "@/components/workspace/BackgroundRecorder";
+import WorkspacePrefetcher from "@/components/workspace/WorkspacePrefetcher";
 import DndWrapper from "@/components/workspace/DndWrapper";
 
 export default async function WorkspaceLayout({
@@ -25,6 +26,7 @@ export default async function WorkspaceLayout({
     <DndWrapper>
       <div className="flex h-screen bg-[#0e0e0e] text-foreground font-sans">
         <WorkspaceUserSync userId={session.user.id} />
+        <WorkspacePrefetcher />
         <BackgroundRecorder />
         <Sidebar />
         <div className="flex-1 flex min-h-0 flex-col overflow-hidden">

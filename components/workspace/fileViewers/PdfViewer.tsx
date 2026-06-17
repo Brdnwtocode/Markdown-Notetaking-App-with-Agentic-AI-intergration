@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { useWorkspaceStore } from "@/lib/store";
 import { Loader2, Download, ExternalLink } from "lucide-react";
 
 interface PdfViewerProps {
@@ -14,11 +15,17 @@ interface PdfViewerProps {
 }
 
 export default function PdfViewer({ fileId, fileName }: PdfViewerProps) {
+  const { fileContentCache, cacheFileContent } = useWorkspaceStore();
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const cached = fileContentCache[fileId];
+    if (cached !== undefined) {
+      try { const parsed = JSON.parse(cached); if (parsed?.url) { setUrl(parsed.url); setLoading(false); return; } } catch {}
+    }
+
     let cancelled = false;
     (async () => {
       try {
@@ -26,6 +33,7 @@ export default function PdfViewer({ fileId, fileName }: PdfViewerProps) {
         if (cancelled) return;
         if (res.data?.url) {
           setUrl(res.data.url);
+          cacheFileContent(fileId, JSON.stringify(res.data));
         } else {
           setError("No viewable URL");
         }

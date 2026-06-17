@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { useWorkspaceStore } from "@/lib/store";
 import { Loader2, ZoomIn, ZoomOut, Download } from "lucide-react";
 
 interface ImageViewerProps {
@@ -14,12 +15,22 @@ interface ImageViewerProps {
 }
 
 export default function ImageViewer({ fileId, fileName }: ImageViewerProps) {
+  const { fileContentCache, cacheFileContent } = useWorkspaceStore();
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
+    // Check content cache first — prevents re-fetch on tab switch
+    const cached = fileContentCache[fileId];
+    if (cached !== undefined) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed?.url) { setUrl(parsed.url); setLoading(false); return; }
+      } catch { /* stale cache, fall through */ }
+    }
+
     let cancelled = false;
     (async () => {
       try {
@@ -27,6 +38,7 @@ export default function ImageViewer({ fileId, fileName }: ImageViewerProps) {
         if (cancelled) return;
         if (res.data?.url) {
           setUrl(res.data.url);
+          cacheFileContent(fileId, JSON.stringify(res.data));
         } else {
           setError("No viewable URL");
         }
@@ -90,7 +102,7 @@ export default function ImageViewer({ fileId, fileName }: ImageViewerProps) {
       </div>
 
       {/* Image */}
-      <div className="flex-1 overflow-auto flex items-start justify-center bg-[#0A0A0A] p-4">
+      <div className="flex-1 overflow-auto flex items-start justify-center bg-[#0A0A0A] p-4 scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
         <img
           src={url}
           alt={fileName}

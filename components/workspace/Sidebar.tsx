@@ -317,8 +317,6 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
     accept: "NODE",
     canDrop: (item: { id: string; type: "FOLDER" | "NOTE" | "STACK" | "RECORDING" | "FILE" }) => {
       if (item.id === node.id) return false;
-      // Files cannot be moved via react-dnd (use native file drop instead)
-      if (item.type === "FILE") return false;
       // Recordings cannot be moved into folders (no folderId on Recording model)
       if (item.type === "RECORDING") return false;
       if (item.type === "FOLDER") {
@@ -338,6 +336,9 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
       } else if (item.type === "STACK") {
         optimisticMoveStack(item.id, node.id);
         toast.success("Stack moved");
+      } else if (item.type === "FILE") {
+        useWorkspaceStore.getState().moveFileRecord(item.id, node.id);
+        toast.success("File moved");
       }
       // RECORDING / FILE: not valid for folder drop, ignored
     },
@@ -531,7 +532,7 @@ function FileNodeRow({ node, level }: { node: TreeNode; level: number }) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: "NODE",
     item: { id: node.id, type: node.type },
-    canDrag: node.type !== "FILE", // Files cannot be dragged within tree
+    canDrag: true, // Files can now be dragged between folders
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
@@ -699,7 +700,7 @@ function ExplorerTree({ searchQuery, sortMethod, actions }: { searchQuery: strin
 
   const [{ isOverRoot }, dropRoot] = useDrop(() => ({
     accept: "NODE",
-    drop: (item: { id: string; type: "FOLDER" | "NOTE" | "STACK" | "RECORDING" }, monitor) => {
+    drop: (item: { id: string; type: "FOLDER" | "NOTE" | "STACK" | "RECORDING" | "FILE" }, monitor) => {
       if (monitor.didDrop()) return;
       
       if (item.type === "FOLDER") {
@@ -711,6 +712,9 @@ function ExplorerTree({ searchQuery, sortMethod, actions }: { searchQuery: strin
       } else if (item.type === "STACK") {
         optimisticMoveStack(item.id, null);
         toast.success("Stack moved to root");
+      } else if (item.type === "FILE") {
+        useWorkspaceStore.getState().moveFileRecord(item.id, null);
+        toast.success("File moved to root");
       }
       // RECORDING: already at root, no-op
     },

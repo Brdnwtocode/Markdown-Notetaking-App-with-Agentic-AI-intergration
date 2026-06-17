@@ -26,7 +26,7 @@ function fmtTime(seconds: number): string {
 
 export default function AudioViewer({ fileId, fileName }: AudioViewerProps) {
   const router = useRouter();
-  const { openTab, setActiveRecordingId } = useWorkspaceStore();
+  const { openTab, setActiveRecordingId, fileContentCache, cacheFileContent } = useWorkspaceStore();
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const [url, setUrl] = useState<string | null>(null);
@@ -39,6 +39,11 @@ export default function AudioViewer({ fileId, fileName }: AudioViewerProps) {
   const [speed, setSpeed] = useState(1);
 
   useEffect(() => {
+    const cached = fileContentCache[fileId];
+    if (cached !== undefined) {
+      try { const parsed = JSON.parse(cached); if (parsed?.url) { setUrl(parsed.url); setLoading(false); return; } } catch {}
+    }
+
     let cancelled = false;
     (async () => {
       try {
@@ -46,6 +51,7 @@ export default function AudioViewer({ fileId, fileName }: AudioViewerProps) {
         if (cancelled) return;
         if (res.data?.url) {
           setUrl(res.data.url);
+          cacheFileContent(fileId, JSON.stringify(res.data));
         } else {
           setError("No playable URL");
         }

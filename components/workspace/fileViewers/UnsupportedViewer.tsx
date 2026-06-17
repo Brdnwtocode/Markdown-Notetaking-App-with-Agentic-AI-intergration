@@ -6,6 +6,7 @@
 
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { useWorkspaceStore } from "@/lib/store";
 import { Loader2, FileWarning, Download } from "lucide-react";
 
 interface UnsupportedViewerProps {
@@ -15,16 +16,24 @@ interface UnsupportedViewerProps {
 }
 
 export default function UnsupportedViewer({ fileId, fileName, mimeType }: UnsupportedViewerProps) {
+  const { fileContentCache, cacheFileContent } = useWorkspaceStore();
   const [url, setUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const cached = fileContentCache[fileId];
+    if (cached !== undefined) {
+      try { const parsed = JSON.parse(cached); if (parsed?.url) { setUrl(parsed.url); setLoading(false); return; } } catch {}
+    }
+
     let cancelled = false;
     (async () => {
       try {
         const res = await axios.get(`/api/storage/${fileId}/content`);
         if (cancelled) return;
-        setUrl(res.data?.url || null);
+        const downloadUrl = res.data?.url || null;
+        setUrl(downloadUrl);
+        if (downloadUrl) cacheFileContent(fileId, JSON.stringify(res.data));
       } catch {
         // Ignore — download URL may not be available
       } finally {

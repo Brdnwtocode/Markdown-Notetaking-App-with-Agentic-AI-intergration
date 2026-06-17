@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import axios from "axios";
+import { useWorkspaceStore } from "@/lib/store";
 import { Loader2, Save, Check } from "lucide-react";
 
 interface TextViewerProps {
@@ -14,6 +15,7 @@ interface TextViewerProps {
 }
 
 export default function TextViewer({ fileId, fileName }: TextViewerProps) {
+  const { fileContentCache, cacheFileContent } = useWorkspaceStore();
   const [content, setContent] = useState<string>("");
   const [originalContent, setOriginalContent] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -29,6 +31,15 @@ export default function TextViewer({ fileId, fileName }: TextViewerProps) {
   originalRef.current = originalContent;
 
   useEffect(() => {
+    // Check content cache first
+    const cachedContent = fileContentCache[fileId];
+    if (cachedContent !== undefined) {
+      setContent(cachedContent);
+      setOriginalContent(cachedContent);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       try {
@@ -40,6 +51,7 @@ export default function TextViewer({ fileId, fileName }: TextViewerProps) {
         const text = typeof res.data === "string" ? res.data : JSON.stringify(res.data);
         setContent(text);
         setOriginalContent(text);
+        cacheFileContent(fileId, text);
       } catch (err: any) {
         if (!cancelled) setError("Failed to load file");
       } finally {
@@ -64,6 +76,7 @@ export default function TextViewer({ fileId, fileName }: TextViewerProps) {
         headers: { "Content-Type": "text/plain" },
       });
       setOriginalContent(current);
+      cacheFileContent(fileId, current);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err: any) {

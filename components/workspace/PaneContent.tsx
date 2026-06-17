@@ -58,14 +58,16 @@ function NotePaneContent({ noteId, tabTitle }: { noteId: string; tabTitle: strin
   const { noteCache, upsertNoteCache } = useWorkspaceStore();
   const [content, setContent] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const cached = noteCache[noteId];
 
   useEffect(() => {
+    // Check cache first — persists across tab switches via Zustand
+    const cached = noteCache[noteId];
     if (cached) {
       setContent(cached.content ?? "");
       setLoading(false);
       return;
     }
+
     let cancelled = false;
     (async () => {
       try {
@@ -81,8 +83,7 @@ function NotePaneContent({ noteId, tabTitle }: { noteId: string; tabTitle: strin
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noteId, cached?.content]);
+  }, [noteId]);
 
   if (loading) {
     return (
@@ -111,7 +112,7 @@ function NotePaneContent({ noteId, tabTitle }: { noteId: string; tabTitle: strin
 // ─── Stack Pane ───────────────────────────────────────────────────────
 
 function StackPaneContent({ stackId, tabTitle }: { stackId: string; tabTitle: string }) {
-  const { stacks } = useWorkspaceStore();
+  const { stacks, updateStack } = useWorkspaceStore();
   const [stack, setStack] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const cached = stacks.find((s) => s.id === stackId);
@@ -127,7 +128,9 @@ function StackPaneContent({ stackId, tabTitle }: { stackId: string; tabTitle: st
       try {
         const res = await axios.get(`/api/stacks/${stackId}`);
         if (cancelled) return;
-        setStack(res.data);
+        const data = res.data;
+        setStack(data);
+        updateStack(data); // Cache in Zustand so it persists across tab switches
       } catch {
         if (!cancelled) setStack(null);
       } finally {
@@ -177,23 +180,32 @@ function StackPaneContent({ stackId, tabTitle }: { stackId: string; tabTitle: st
 
 // ─── Tasks Pane ───────────────────────────────────────────────────────
 
+// Module-level flag: once tasks have been fetched in this session, skip re-fetch
+let tasksFetched = false;
+
 function TasksPaneContent() {
   const { tasks, setTasks } = useWorkspaceStore();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (tasksFetched || tasks.length > 0) {
+      if (tasks.length > 0) tasksFetched = true;
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       try {
         const res = await axios.get("/api/tasks");
         if (cancelled) return;
         setTasks(res.data);
+        tasksFetched = true;
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -258,11 +270,19 @@ function TasksPaneContent() {
 
 // ─── Calendar Pane ────────────────────────────────────────────────────
 
+let calendarFetched = false;
+
 function CalendarPaneContent() {
   const { calendarEvents, setCalendarEvents } = useWorkspaceStore();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (calendarFetched || calendarEvents.length > 0) {
+      if (calendarEvents.length > 0) calendarFetched = true;
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     (async () => {
       try {
@@ -276,12 +296,12 @@ function CalendarPaneContent() {
           const data = await res.json();
           setCalendarEvents(data);
         }
+        calendarFetched = true;
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (loading) {
@@ -345,19 +365,31 @@ function RecordsPaneContent() {
 // ─── File Pane ────────────────────────────────────────────────────────
 
 function FilePaneContent({ fileId }: { fileId: string; tabTitle?: string }) {
-  const { fileRecords } = useWorkspaceStore();
+  const { fileRecords, fileRecordCache, cacheFileRecord, openTab } = useWorkspaceStore();
   const [fileRecord, setFileRecord] = useState<FileRecord | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Try cached first
-    const cached = fileRecords.find((fr) => fr.id === fileId);
+    // 1. Cache first (persists across tab switches)
+    const cached = fileRecordCache[fileId];
     if (cached) {
       setFileRecord(cached);
+      openTab(fileId, "FILE", cached.fileName);
       setLoading(false);
       return;
     }
 
+    // 2. FileRecords list
+    const fromList = fileRecords.find((fr) => fr.id === fileId);
+    if (fromList) {
+      setFileRecord(fromList);
+      cacheFileRecord(fromList);
+      openTab(fileId, "FILE", fromList.fileName);
+      setLoading(false);
+      return;
+    }
+
+    // 3. Fetch from API
     let cancelled = false;
     (async () => {
       try {
@@ -366,6 +398,8 @@ function FilePaneContent({ fileId }: { fileId: string; tabTitle?: string }) {
         const found = (res.data as FileRecord[]).find((fr: FileRecord) => fr.id === fileId);
         if (found) {
           setFileRecord(found);
+          cacheFileRecord(found);
+          openTab(fileId, "FILE", found.fileName);
         }
       } catch {
         // Will show error state
