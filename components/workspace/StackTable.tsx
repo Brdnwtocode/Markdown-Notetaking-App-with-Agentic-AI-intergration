@@ -126,6 +126,9 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
     setIsDirty(true);
   }, [columns, rows]);
 
+  // Key derived from column IDs for width-initialization effect
+  const columnsKey = useMemo(() => columns.map((c) => c.id).join(","), [columns]);
+
   // Initialize column widths only for new columns, preserving existing widths
   useEffect(() => {
     setColumnWidths((prev) => {
@@ -137,7 +140,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
       });
       return next;
     });
-  }, [columns.map((c) => c.id).join(",")]);
+  }, [columnsKey, columns]);
 
   // Process rows (group, sort, filter)
   const processedData = useMemo(() => {
@@ -682,7 +685,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
             </DropdownMenuTrigger>
             <DropdownMenuContent 
               align="start" 
-              className="bg-[#131313] border border-[#27272A] rounded-none max-h-[60vh] overflow-y-auto"
+              className="bg-[#131313] border border-[#27272A] rounded-none max-h-[60vh] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent"
               avoidCollisions={true}
               collisionPadding={8}
               sideOffset={4}
@@ -839,7 +842,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                       <DropdownMenuContent 
                         align="end" 
                         side="bottom"
-                        className="w-56 bg-zinc-900/100 backdrop-blur-md border border-zinc-700/100 max-h-[60vh] overflow-y-auto"
+                        className="w-56 bg-zinc-900/100 backdrop-blur-md border border-zinc-700/100 max-h-[60vh] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent"
                         sideOffset={4}
                         avoidCollisions={true}
                         collisionPadding={8}
@@ -980,7 +983,7 @@ export default function StackTable({ stackId, initialStack, onSave }: StackTable
                     </DropdownMenuTrigger>
                     <DropdownMenuContent 
                       align="start" 
-                      className="bg-zinc-900/90 backdrop-blur-md border border-zinc-700/60 max-h-[60vh] overflow-y-auto"
+                      className="bg-zinc-900/90 backdrop-blur-md border border-zinc-700/60 max-h-[60vh] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent"
                       avoidCollisions={true}
                       collisionPadding={8}
                       sideOffset={4}

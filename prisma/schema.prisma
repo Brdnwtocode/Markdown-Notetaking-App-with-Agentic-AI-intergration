@@ -74,6 +74,7 @@ model Folder {
   notes     Note[]
   stacks    Stack[]
   fileRecords FileRecord[]
+  recordings Recording[]
 
   @@index([userId])
 }
@@ -230,6 +231,10 @@ model Recording {
   audioSizeBytes Int?        @map("audio_size_bytes")
   errorLog      String?      @map("error_log") @db.Text
 
+  // Folder organisation
+  folderId      String?      @map("folder_id")
+  folder        Folder?      @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
   // Agentic Automate results (JSON payloads stored after AI processing)
   noteMutation        Json?   @map("note_mutation")        @db.JsonB
   taskMutations       Json?   @map("task_mutations")       @db.JsonB
@@ -246,6 +251,7 @@ model Recording {
   @@map("recordings")
   @@index([userId, createdAt(sort: Desc)])
   @@index([userId, status])
+  @@index([userId, folderId])
 }
 
 model Attachment {

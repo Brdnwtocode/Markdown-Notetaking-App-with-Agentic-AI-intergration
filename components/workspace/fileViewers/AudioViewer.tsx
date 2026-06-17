@@ -62,7 +62,7 @@ export default function AudioViewer({ fileId, fileName }: AudioViewerProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, [fileId]);
+  }, [fileId, fileContentCache, cacheFileContent]);
 
   const handlePlayPause = () => {
     const a = audioRef.current;

@@ -1,23 +1,13 @@
 // lib/storage.ts
 //
-// Abstracted S3-compatible storage layer.
-//
-//   LOCAL DEV  → MinIO  (docker-compose, port 9000)
-//   PRODUCTION → AWS S3 (or Cloudflare R2, Supabase Storage, etc.)
-//
-// Both speak the S3 API — the same @aws-sdk/client-s3 works with either.
-// Swap providers by changing the three STORAGE_* env vars.
-//
-// ─── Quick Start (Local Dev) ────────────────────────────────────────────────
-//   1. docker-compose up -d minio
-//   2. Visit http://localhost:9001 (admin / minioadmin)
-//   3. Create a bucket named "lockin-records" (or whatever STORAGE_BUCKET says)
-//   4. Set the bucket's Access Policy to "public" (or use presigned URLs in code)
+// Abstracted S3-compatible storage layer using AWS S3 in production.
+// The same @aws-sdk/client-s3 also works with S3-compatible providers
+// (Cloudflare R2, Supabase Storage, etc.) — swap by changing env vars.
 //
 // ─── Production (AWS S3) ────────────────────────────────────────────────────
 //   STORAGE_ENDPOINT="https://s3.<region>.amazonaws.com"
 //   STORAGE_REGION="<region>"
-//   STORAGE_BUCKET="<bucket-name>"
+//   STORAGE_BUCKET="markdown-note-app"
 //   STORAGE_ACCESS_KEY="<aws-access-key>"
 //   STORAGE_SECRET_KEY="<aws-secret-key>"
 //   STORAGE_FORCE_PATH_STYLE="false"
@@ -46,11 +36,11 @@ function getS3Client(): S3Client {
   const rawEndpoint = process.env.STORAGE_ENDPOINT || "";
   const region = process.env.STORAGE_REGION || "us-east-1";
   const forcePathStyle =
-    process.env.STORAGE_FORCE_PATH_STYLE !== "false"; // default true for MinIO
+    process.env.STORAGE_FORCE_PATH_STYLE !== "false"; // default true; set STORAGE_FORCE_PATH_STYLE=false for AWS S3
 
   const creds = {
-    accessKeyId: process.env.STORAGE_ACCESS_KEY || "minioadmin",
-    secretAccessKey: process.env.STORAGE_SECRET_KEY || "minioadmin",
+    accessKeyId: process.env.STORAGE_ACCESS_KEY || "",
+    secretAccessKey: process.env.STORAGE_SECRET_KEY || "",
   };
 
   // For AWS S3, do NOT set an explicit endpoint — let the SDK
@@ -73,7 +63,7 @@ function getS3Client(): S3Client {
 }
 
 function getBucket(): string {
-  return process.env.STORAGE_BUCKET || "lockin-records";
+  return process.env.STORAGE_BUCKET || "markdown-note-app";
 }
 
 // Lazy singleton — created on first use so env vars are loaded
@@ -115,6 +105,10 @@ export async function uploadFile(
   contentType?: string,
 ): Promise<UploadResult> {
   const bucket = getBucket();
+
+  // Ensure the bucket exists before attempting upload (one-time lazy check)
+  await ensureBucket(bucket);
+
   const ext = fileName.split(".").pop()?.toLowerCase() || "bin";
   const mime = contentType || mimeFromExt(ext);
 
@@ -122,7 +116,23 @@ export async function uploadFile(
   const resolvedFolder = folder || getFolderByMimeType(mime);
   const key = `${resolvedFolder}/${randomUUID()}.${ext}`;
 
-  console.log("[storage] Uploading to bucket:", bucket, "key:", key, "mime:", mime);
+  // Determine size from the body BEFORE upload (CompleteMultipartUploadOutput
+  // doesn't include a Size property in the TypeScript types).
+  let sizeBytes = 0;
+  if (body instanceof Buffer || body instanceof Uint8Array) {
+    sizeBytes = body.byteLength;
+  } else if (typeof body === "string") {
+    sizeBytes = Buffer.byteLength(body);
+  } else if (typeof Blob !== "undefined" && body instanceof Blob) {
+    sizeBytes = body.size;
+  } else if (typeof File !== "undefined" && body instanceof File) {
+    sizeBytes = body.size;
+  } else if (body && typeof (body as any).byteLength === "number") {
+    // ArrayBuffer, SharedArrayBuffer, etc.
+    sizeBytes = (body as any).byteLength;
+  }
+
+  console.log("[storage] Uploading to bucket:", bucket, "key:", key, "mime:", mime, "size:", sizeBytes);
 
   try {
     const upload = new Upload({
@@ -157,15 +167,6 @@ export async function uploadFile(
     { expiresIn: 3600 * 24 * 7 }, // 7-day presigned URL by default
   );
 
-  // Determine size from the body since CompleteMultipartUploadCommandOutput
-  // doesn't include a Size property in the TypeScript types
-  let sizeBytes = 0;
-  if (body instanceof Buffer || body instanceof Uint8Array) {
-    sizeBytes = body.byteLength;
-  } else if (typeof body === "string") {
-    sizeBytes = Buffer.byteLength(body);
-  }
-
   return {
     key,
     url,
@@ -185,6 +186,24 @@ export async function getDownloadUrl(
     new GetObjectCommand({ Bucket: getBucket(), Key: key }),
     { expiresIn: expiresInSeconds },
   );
+}
+
+/**
+ * Download a file from S3 as a Buffer (server-side only).
+ * Used by BFF routes that need to proxy S3 content to other services.
+ */
+export async function getFileBuffer(key: string): Promise<{ buffer: Buffer; contentType: string }> {
+  const result = await client().send(
+    new GetObjectCommand({ Bucket: getBucket(), Key: key }),
+  );
+  const body = result.Body;
+  if (!body) throw new Error("Empty S3 object body");
+  // Convert stream/byte array to Buffer
+  const byteArray = await body.transformToByteArray();
+  return {
+    buffer: Buffer.from(byteArray),
+    contentType: result.ContentType || "application/octet-stream",
+  };
 }
 
 /**

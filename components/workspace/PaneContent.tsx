@@ -83,7 +83,7 @@ function NotePaneContent({ noteId, tabTitle }: { noteId: string; tabTitle: strin
       }
     })();
     return () => { cancelled = true; };
-  }, [noteId]);
+  }, [noteId, noteCache, upsertNoteCache]);
 
   if (loading) {
     return (
@@ -206,7 +206,7 @@ function TasksPaneContent() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [tasks.length, setTasks]);
 
   if (loading) {
     return (
@@ -302,7 +302,7 @@ function CalendarPaneContent() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [calendarEvents.length, setCalendarEvents]);
 
   if (loading) {
     return (

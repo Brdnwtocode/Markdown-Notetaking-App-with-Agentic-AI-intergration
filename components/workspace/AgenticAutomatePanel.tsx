@@ -327,9 +327,9 @@ export default function AgenticAutomatePanel({
 // ─── Results sub-component ──────────────────────────────────────────────────
 
 function AutomateResultsPanel({ result }: { result: any }) {
-  if (!result) return null;
-
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  if (!result) return null;
 
   const toggle = (key: string) =>
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));

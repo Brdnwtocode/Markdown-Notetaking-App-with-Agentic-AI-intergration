@@ -229,7 +229,7 @@ export default function SchemaBuilder({
         </div>
 
         {/* Properties Table */}
-        <div className="flex-1 overflow-y-auto max-h-[350px] border border-[#27272A] bg-[#131313] mb-4 relative" ref={dropdownRef}>
+        <div className="flex-1 overflow-y-auto max-h-[350px] border border-[#27272A] bg-[#131313] mb-4 relative scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent" ref={dropdownRef}>
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-[#1C1C1E] border-b border-[#27272A] text-[10px] text-zinc-500 font-technical uppercase">
@@ -378,7 +378,7 @@ export default function SchemaBuilder({
               )}
             </div>
             {/* Table rows (8 sample rows) */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
               {columns.filter(c => c.name.trim()).length > 0 ? (
                 Array.from({ length: 8 }).map((_, rowIdx) => {
                   const rowVariants = [

@@ -84,3 +84,17 @@ export function applySuggestionPadding(
 
   return { paddedSuggestion: padded, adjustedPos: pos };
 }
+
+/**
+ * Format a duration in seconds as a human-readable string (MM:SS or HH:MM:SS).
+ * Returns "--:--" for zero or negative durations.
+ * Used by the Records workstation and CaptureQueue for displaying recording lengths.
+ */
+export function fmtDuration(sec: number): string {
+  if (!sec || sec <= 0) return "--:--";
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = Math.floor(sec % 60);
+  if (h > 0) return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}

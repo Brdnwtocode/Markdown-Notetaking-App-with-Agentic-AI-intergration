@@ -214,7 +214,7 @@ export const createRecordsSlice: StateCreator<RootStore, [], [], RecordsSlice> =
     set((s) => ({ liveTranscript: s.liveTranscript + chunk })),
   setLiveTranscript: (t) => set({ liveTranscript: t }),
   resetRecordingState: () =>
-    set((s) => ({
+    set(() => ({
       isRecording: false,
       isPaused: false,
       // Preserve the user's STT preference across sessions — don't force it back to true

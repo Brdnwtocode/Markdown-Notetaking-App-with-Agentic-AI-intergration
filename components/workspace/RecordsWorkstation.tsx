@@ -20,7 +20,7 @@ import CaptureQueue, { getBlob, removeBlob } from "./CaptureQueue";
 import type { Recording, LocalRecording } from "@/lib/slices/recordsSlice";
 import {
   Play, Pause, Square, Mic, SkipBack, SkipForward,
-  Scissors, Volume2, Loader2, Clock, Zap, Save, X,
+  Scissors, Volume2, Loader2, Zap, Save, X,
   FileText, CheckSquare, Table2, Users, CalendarDays,
   Paperclip, AlertTriangle, ChevronDown, ChevronUp,
 } from "lucide-react";
@@ -144,7 +144,7 @@ export default function RecordsWorkstation() {
       } catch { /* silent */ }
       finally { setRecordingsLoading(false); }
     })();
-  }, [setRecordings, setRecordingsLoading]);
+  }, [recordings.length, setRecordings, setRecordingsLoading]);
 
   // ─── Auto-scroll transcript ────────────────────────────────────────────
   useEffect(() => { transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [liveTranscript]);
@@ -441,7 +441,7 @@ export default function RecordsWorkstation() {
     //    the BFF (/api/records/automate) fetches the audio server-side
     //    using the recording's audioKey. Return null — caller handles this.
     return null;
-  }, [activeRecordingId, hasUnsavedRecording, recordings, getCurrentAudioBlob]);
+  }, [hasUnsavedRecording, getCurrentAudioBlob]);
 
   // ─── Render ─────────────────────────────────────────────────────────────
   const durationStr = fmtDuration(recordingDurationSec);

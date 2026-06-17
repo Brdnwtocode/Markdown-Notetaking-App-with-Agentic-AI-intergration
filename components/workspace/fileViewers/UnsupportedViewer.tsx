@@ -41,7 +41,7 @@ export default function UnsupportedViewer({ fileId, fileName, mimeType }: Unsupp
       }
     })();
     return () => { cancelled = true; };
-  }, [fileId]);
+  }, [fileId, fileContentCache, cacheFileContent]);
 
   return (
     <div className="h-full flex flex-col items-center justify-center gap-6 p-8 bg-[#0E0E0E]">

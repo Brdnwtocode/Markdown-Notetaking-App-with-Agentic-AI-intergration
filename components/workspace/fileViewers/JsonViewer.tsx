@@ -127,7 +127,7 @@ export default function JsonViewer({ fileId, onConvert }: JsonViewerProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, [fileId]);
+  }, [fileId, fileContentCache, cacheFileContent]);
 
   const isDirty = content !== originalContent;
 
@@ -150,7 +150,7 @@ export default function JsonViewer({ fileId, onConvert }: JsonViewerProps) {
     } finally {
       setSaving(false);
     }
-  }, [fileId]);
+  }, [fileId, cacheFileContent]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

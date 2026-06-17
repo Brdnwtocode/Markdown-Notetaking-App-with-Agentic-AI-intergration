@@ -49,3 +49,4 @@ reports/Feedback.md
 docs/Presentation Pages/AgenticAutomateSequence.mmd
 docs/Presentation Pages/ClassDiagram.mmd
 docs/Records-Feature/UI-Initial-Design
+scripts/seed-mock-data.ts

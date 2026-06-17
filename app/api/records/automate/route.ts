@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       if (rec.audioKey) {
         try {
           const { buffer, contentType } = await getFileBuffer(rec.audioKey);
-          resolvedAudio = new File([buffer], "recording.webm", { type: contentType });
+          resolvedAudio = new File([new Uint8Array(buffer)], "recording.webm", { type: contentType });
           console.log(`[Records Automate] Fetched audio from S3: ${rec.audioKey} (${buffer.length} bytes)`);
         } catch (err) {
           console.error("[Records Automate] Failed to fetch audio from S3:", err);

@@ -60,7 +60,7 @@ export default function MarkdownViewer({ fileId, fileName: _fileName, onConvert 
       }
     })();
     return () => { cancelled = true; };
-  }, [fileId]);
+  }, [fileId, fileContentCache, cacheFileContent]);
 
   const isDirty = content !== originalContent;
 
@@ -83,7 +83,7 @@ export default function MarkdownViewer({ fileId, fileName: _fileName, onConvert 
     } finally {
       setSaving(false);
     }
-  }, [fileId]);
+  }, [fileId, cacheFileContent]);
 
   // Ctrl+S save
   useEffect(() => {

@@ -44,7 +44,7 @@ export default function VideoViewer({ fileId, fileName }: VideoViewerProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, [fileId]);
+  }, [fileId, fileContentCache, cacheFileContent]);
 
   if (loading) {
     return (

@@ -182,7 +182,7 @@ export default function StackPage() {
           </DropdownMenuTrigger>
           <DropdownMenuContent 
             align="end" 
-            className="bg-zinc-900/90 backdrop-blur-md border border-zinc-700/60 max-h-[60vh] overflow-y-auto"
+            className="bg-zinc-900/90 backdrop-blur-md border border-zinc-700/60 max-h-[60vh] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent"
             avoidCollisions={true}
             collisionPadding={8}
             sideOffset={4}

@@ -5,7 +5,7 @@
 //   IDLE → MINTING → CONNECTING → STREAMING → FINALIZING → IDLE
 //                         └──(timeout / error)──→ FALLBACK → IDLE
 //
-// Happy path: Deepgram WebSocket (nova-3, language=vi) with interim results.
+// Happy path: Deepgram WebSocket (nova-3, auto-detect vi/en) with interim results.
 // Fallback: existing /api/voice/process → FastAPI batch pipeline, with the
 //           pre-buffered audio from MediaRecorder that ran in parallel.
 //
@@ -36,9 +36,15 @@ export interface DeepgramSTTOptions {
    * On the fallback path this is the transcript from FastAPI.
    */
   onTranscriptReady: (transcript: string) => void;
-  /** BCP-47 language tag. Defaults to "vi" (Vietnamese). */
-  language?: string;
-  /** Deepgram model. Defaults to "nova-3" which supports vi as of 2026-01. */
+  /**
+   * BCP-47 language tag(s). Supports a single code ("vi"), comma-separated
+   * list ("vi,en"), or an array (["vi","en"]).
+   * - Single language: passed as `&language=X` for best accuracy.
+   * - Multiple/none: omitted entirely — nova-3 auto-detects by default.
+   * Defaults to ["vi","en"] (auto-detect).
+   */
+  language?: string | string[];
+  /** Deepgram model. Defaults to "nova-3". */
   model?: string;
   /** Milliseconds to wait for the WebSocket to open before falling back. Default: 3000 */
   wsTimeoutMs?: number;
@@ -46,14 +52,32 @@ export interface DeepgramSTTOptions {
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
+/**
+ * Build the language query-string fragment for the Deepgram WS URL.
+ * - Single language → `&language=vi` (lock to one language, best accuracy)
+ * - Multiple or none  → empty string (let nova-3 auto-detect, default behaviour)
+ * Returns the fragment including a leading '&', or empty string.
+ */
+function buildLanguageParam(lang: string | string[]): string {
+  const codes = Array.isArray(lang) ? lang : lang.split(",").map((s) => s.trim()).filter(Boolean);
+  // Single explicit language → lock it for accuracy
+  if (codes.length === 1) return `&language=${codes[0]}`;
+  // Multiple or none → let Deepgram auto-detect (nova-3 default)
+  return "";
+}
+
 export function useDeepgramSTT({
   onInterimTranscript,
   onTranscriptReady,
-  language = "vi",
+  language = ["vi", "en"],
   model = "nova-3",
   wsTimeoutMs = 3000,
 }: DeepgramSTTOptions) {
   const [status, setStatus] = useState<STTStatus>("idle");
+
+  // Normalize language early — the ref never changes across renders so
+  // the startStreaming callback closure stays stable.
+  const languageParam = buildLanguageParam(language);
 
   // All mutable, non-reactive state lives in refs to avoid stale closures
   // in event handlers without needing to re-register listeners on re-renders.
@@ -65,6 +89,7 @@ export function useDeepgramSTT({
   const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const committedTranscriptRef = useRef<string>("");  // speech_final segments joined
   const fallbackInProgressRef = useRef(false); // guard against duplicate fallback
+  const statusRef = useRef<STTStatus>("idle"); // shared across start/stop/stream — prevents onclose fallback race
 
   // Snapshot of context gathered at start() time — needed by the fallback
   // which may run asynchronously after the start call returns.
@@ -120,6 +145,7 @@ export function useDeepgramSTT({
     }
 
     setStatus("fallback");
+    statusRef.current = "fallback";
     // Clear context ref early so duplicate calls do not trigger multiple fallback runs
     sessionContextRef.current = null;
     toast("Network issue — using batch transcription", { icon: "⚠️" });
@@ -183,6 +209,7 @@ export function useDeepgramSTT({
       sessionContextRef.current = null;
       fallbackInProgressRef.current = false;
       setStatus("idle");
+      statusRef.current = "idle";
     }
   }, [onTranscriptReady]);
 
@@ -192,6 +219,7 @@ export function useDeepgramSTT({
     async (stream: MediaStream) => {
       // 1. Mint a short-lived token (API key stays server-side)
       setStatus("minting");
+      statusRef.current = "minting";
       let token: string;
       try {
         const res = await fetch("/api/deepgram/token");
@@ -217,7 +245,7 @@ export function useDeepgramSTT({
         runFallback(sessionContextRef.current);
       }, wsTimeoutMs);
 
-      const wsUrl = `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&smart_format=true&interim_results=true&endpointing=1000&punctuate=true&encoding=linear16&sample_rate=16000`;
+      const wsUrl = `wss://api.deepgram.com/v1/listen?model=${model}${languageParam}&smart_format=true&interim_results=true&endpointing=1000&punctuate=true&encoding=linear16&sample_rate=16000`;
       const socket = new WebSocket(wsUrl, ["token", token]);
 
       const connectPromise = new Promise<void>((resolve, reject) => {
@@ -232,6 +260,7 @@ export function useDeepgramSTT({
             fallbackTimerRef.current = null;
           }
           setStatus("streaming");
+          statusRef.current = "streaming";
           resolve();
         };
 
@@ -248,11 +277,8 @@ export function useDeepgramSTT({
         return runFallback(sessionContextRef.current);
       }
 
-      // Track the latest status in a ref so WS handlers don't need setState updater side-effects
-      const statusRef = { current: "streaming" as STTStatus };
-
       socket.onclose = () => {
-        // Only fall back if we haven't already entered finalization/fallback
+        // Only fall back if the WS closed unexpectedly (not from an intentional stop)
         if (statusRef.current === "streaming" && !fallbackInProgressRef.current) {
           const ctxCopy = sessionContextRef.current;
           setTimeout(() => runFallback(ctxCopy), 0);
@@ -348,7 +374,7 @@ export function useDeepgramSTT({
         scriptNode.connect(audioContext.destination);
       }
     },
-    [language, model, wsTimeoutMs, onInterimTranscript, runFallback]
+    [languageParam, model, wsTimeoutMs, onInterimTranscript, runFallback]
   );
 
   // ─── Public API ────────────────────────────────────────────────────────────
@@ -369,6 +395,7 @@ export function useDeepgramSTT({
       blobsRef.current = [];
       committedTranscriptRef.current = "";
       sessionContextRef.current = { contextType, contextId, extras };
+      statusRef.current = "minting";
 
       // Request mic access
       let stream: MediaStream;
@@ -386,6 +413,7 @@ export function useDeepgramSTT({
         toast.error("Microphone access denied");
         console.error("[useDeepgramSTT] getUserMedia failed:", err);
         sessionContextRef.current = null;
+        statusRef.current = "idle";
         return;
       }
 
@@ -414,6 +442,7 @@ export function useDeepgramSTT({
     if (status === "idle" || status === "fallback") return;
  
     setStatus("finalizing");
+    statusRef.current = "finalizing"; // prevent onclose/onerror from triggering fallback
  
     if (dgConnectionRef.current) {
       // Signal Deepgram to flush — it will send remaining speech_final events
@@ -433,6 +462,7 @@ export function useDeepgramSTT({
       sessionContextRef.current = null;
       committedTranscriptRef.current = "";
       setStatus("idle");
+      statusRef.current = "idle";
     } else {
       // WebSocket was not connected when stop() was called. Run fallback.
       console.warn("[useDeepgramSTT] stop() called with no active WS connection, running fallback.");

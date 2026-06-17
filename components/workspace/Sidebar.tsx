@@ -142,16 +142,21 @@ function buildTree(
     }
   });
 
-  // Recordings live at root level only (no folderId on Recording model)
+  // Recordings can now live in folders (folderId was added to the Recording model)
   recordings.forEach((r) => {
-    rootNodes.push({
+    const node: TreeNode = {
       id: r.id,
       name: r.title || "Untitled Recording",
       type: "RECORDING",
-      parentId: null,
+      parentId: r.folderId,
       level: 0,
       item: r,
-    });
+    };
+    if (r.folderId && folderNodesMap[r.folderId]) {
+      folderNodesMap[r.folderId].children?.push(node);
+    } else {
+      rootNodes.push(node);
+    }
   });
 
   // FileRecords can live in folders or at root
@@ -317,8 +322,6 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
     accept: "NODE",
     canDrop: (item: { id: string; type: "FOLDER" | "NOTE" | "STACK" | "RECORDING" | "FILE" }) => {
       if (item.id === node.id) return false;
-      // Recordings cannot be moved into folders (no folderId on Recording model)
-      if (item.type === "RECORDING") return false;
       if (item.type === "FOLDER") {
         return !isDescendantFolder(item.id, node.id, folders);
       }
@@ -339,8 +342,10 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
       } else if (item.type === "FILE") {
         useWorkspaceStore.getState().moveFileRecord(item.id, node.id);
         toast.success("File moved");
+      } else if (item.type === "RECORDING") {
+        useWorkspaceStore.getState().moveRecording(item.id, node.id);
+        toast.success("Recording moved");
       }
-      // RECORDING / FILE: not valid for folder drop, ignored
     },
     collect: (monitor) => ({
       isOver: monitor.isOver({ shallow: true }),
@@ -368,7 +373,7 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
       ))}
       
       <div
-        className={`flex items-center gap-1.5 py-1 pr-2 text-sm select-none transition-all duration-200 cursor-pointer relative border border-transparent ${
+        className={`flex items-start gap-1.5 py-1 pr-2 text-sm select-none transition-all duration-200 cursor-pointer relative border border-transparent ${
           isHighlight 
             ? "border-dashed border-[#10B981] bg-[#10B9810D] glow-emerald-subtle" 
             : isDragging
@@ -378,9 +383,9 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
         style={{ paddingLeft: `${(level * 16) + 8}px` }}
         onClick={() => toggleFolderExpanded(node.id)}
       >
-        <span className="flex items-center gap-1 flex-1 min-w-0">
+        <span className="flex items-start gap-1 flex-1 min-w-0">
           <ChevronRight
-            className={`h-3.5 w-3.5 text-zinc-500 hover:text-white transition-transform duration-150 flex-shrink-0 ${
+            className={`mt-[3px] h-3.5 w-3.5 text-zinc-500 hover:text-white transition-transform duration-150 flex-shrink-0 ${
               isExpanded ? "rotate-90" : ""
             }`}
             onClick={(e) => {
@@ -388,14 +393,14 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
               toggleFolderExpanded(node.id);
             }}
           />
-          <Folder className="h-4 w-4 text-[#10B981] fill-[#10B981]/10 flex-shrink-0" />
-          <span className="truncate text-[#FFFFFF] font-sans font-medium text-[14px]">
+          <Folder className="mt-[2px] h-4 w-4 text-[#10B981] fill-[#10B981]/10 flex-shrink-0" />
+          <span className="break-words whitespace-normal text-[#FFFFFF] font-sans font-medium text-[14px] leading-snug">
             {node.name}
           </span>
         </span>
 
         {/* Context Actions — opacity toggle avoids layout shift */}
-        <div className="flex items-center gap-0.5 ml-auto pl-1 bg-[#131313] md:bg-transparent rounded z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+        <div className="mt-[1px] flex items-center gap-0.5 ml-auto pl-1 bg-[#131313] md:bg-transparent rounded z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
           <button
             title="New Subfolder"
             onClick={(e) => {
@@ -450,28 +455,35 @@ function FolderNodeRow({ node, level, actions }: { node: TreeNode; level: number
         </div>
       </div>
 
-      {isExpanded && node.children && node.children.length > 0 && (
-        <div className="flex flex-col">
-          {node.children.map((child) => (
-            <TreeNodeRow key={child.id} node={child} level={level + 1} actions={actions} />
-          ))}
-        </div>
-      )}
-      {isExpanded && node.children && node.children.length === 0 && (
-        <div
-          className="py-1 text-[11px] text-zinc-500 italic relative"
-          style={{ paddingLeft: `${((level + 1) * 16) + 24}px` }}
-        >
-          {Array.from({ length: level + 1 }).map((_, idx) => (
+      {/* Children — animated expand/collapse via CSS grid transition */}
+      <div className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+        isExpanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+      }`}>
+        <div className="overflow-hidden">
+          {node.children && node.children.length > 0 && (
+            <div className="flex flex-col">
+              {node.children.map((child) => (
+                <TreeNodeRow key={child.id} node={child} level={level + 1} actions={actions} />
+              ))}
+            </div>
+          )}
+          {node.children && node.children.length === 0 && (
             <div
-              key={idx}
-              className="absolute top-0 bottom-0 border-l border-[#27272A]"
-              style={{ left: `${(idx * 16) + 12}px` }}
-            />
-          ))}
-          Empty Folder
+              className="py-1 text-[11px] text-zinc-500 italic relative"
+              style={{ paddingLeft: `${((level + 1) * 16) + 24}px` }}
+            >
+              {Array.from({ length: level + 1 }).map((_, idx) => (
+                <div
+                  key={idx}
+                  className="absolute top-0 bottom-0 border-l border-[#27272A]"
+                  style={{ left: `${(idx * 16) + 12}px` }}
+                />
+              ))}
+              Empty Folder
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -592,41 +604,41 @@ function FileNodeRow({ node, level }: { node: TreeNode; level: number }) {
 
       {isOptimisticTemp ? (
         <div
-          className="flex items-center gap-1.5 py-1 px-3 text-sm text-zinc-500 select-none relative"
+          className="flex items-start gap-1.5 py-1 px-3 text-sm text-zinc-500 select-none relative"
           style={{ paddingLeft: `${(level * 16) + 8}px` }}
         >
-          <Loader2 className="h-3.5 w-3.5 animate-spin flex-shrink-0" />
-          <span className="truncate flex-1 font-sans font-medium text-[14px]">
+          <Loader2 className="mt-[2px] h-3.5 w-3.5 animate-spin flex-shrink-0" />
+          <span className="break-words whitespace-normal flex-1 font-sans font-medium text-[14px] leading-snug">
             {node.name}
           </span>
         </div>
       ) : isUploading ? (
         /* Upload-in-progress ghost node */
         <div
-          className="flex items-center gap-1.5 py-1 pr-3 text-sm select-none relative animate-pulse"
+          className="flex items-start gap-1.5 py-1 pr-3 text-sm select-none relative animate-pulse"
           style={{ paddingLeft: `${(level * 16) + 8}px` }}
         >
-          <Loader2 className="h-4 w-4 text-[#10B981] animate-spin flex-shrink-0" />
-          <File className="h-4 w-4 text-[#10B981]/50 flex-shrink-0" />
-          <span className="truncate flex-1 font-sans font-medium text-[14px] text-zinc-400">
+          <Loader2 className="mt-[2px] h-4 w-4 text-[#10B981] animate-spin flex-shrink-0" />
+          <File className="mt-[2px] h-4 w-4 text-[#10B981]/50 flex-shrink-0" />
+          <span className="break-words whitespace-normal flex-1 font-sans font-medium text-[14px] text-zinc-400 leading-snug">
             {node.name}
           </span>
-          <span className="ml-1 font-mono text-[10px] text-[#10B981] uppercase flex-shrink-0 tracking-wider font-semibold animate-pulse">
+          <span className="mt-[3px] ml-1 font-mono text-[10px] text-[#10B981] uppercase flex-shrink-0 tracking-wider font-semibold animate-pulse">
             UPLOADING
           </span>
         </div>
       ) : isUploadError ? (
         /* Upload-failed ghost node */
         <div
-          className="flex items-center gap-1.5 py-1 pr-3 text-sm select-none relative"
+          className="flex items-start gap-1.5 py-1 pr-3 text-sm select-none relative"
           style={{ paddingLeft: `${(level * 16) + 8}px` }}
           title={uploadItem?.errorMessage || "Upload failed"}
         >
-          <File className="h-4 w-4 text-rose-400 flex-shrink-0" />
-          <span className="truncate flex-1 font-sans font-medium text-[14px] text-rose-400/70">
+          <File className="mt-[2px] h-4 w-4 text-rose-400 flex-shrink-0" />
+          <span className="break-words whitespace-normal flex-1 font-sans font-medium text-[14px] text-rose-400/70 leading-snug">
             {node.name}
           </span>
-          <span className="ml-1 font-mono text-[10px] text-rose-400 uppercase flex-shrink-0 tracking-wider font-semibold">
+          <span className="mt-[3px] ml-1 font-mono text-[10px] text-rose-400 uppercase flex-shrink-0 tracking-wider font-semibold">
             FAILED
           </span>
         </div>
@@ -634,7 +646,7 @@ function FileNodeRow({ node, level }: { node: TreeNode; level: number }) {
         <Link
           href={href}
           onClick={handleClick}
-          className={`flex items-center gap-1.5 py-1 pr-3 text-sm select-none border-l-2 relative transition-all duration-200 ${
+          className={`flex items-start gap-1.5 py-1 pr-3 text-sm select-none border-l-2 relative transition-all duration-200 ${
             isActive
               ? "bg-[#131313] text-white border-l-[#10B981] pl-[6px]"
               : "text-[#A1A1AA] border-l-transparent hover:text-white hover:bg-[#131313] pl-2"
@@ -642,24 +654,24 @@ function FileNodeRow({ node, level }: { node: TreeNode; level: number }) {
           style={{ paddingLeft: `${(level * 16) + 8}px`, cursor: isDragging ? "grabbing" : "grab" }}
         >
           {/* Grip Handle — invisible to avoid layout shift, visible on hover */}
-          <GripVertical className="h-3.5 w-3.5 text-zinc-600 invisible group-hover:visible flex-shrink-0" />
+          <GripVertical className="mt-[2px] h-3.5 w-3.5 text-zinc-600 invisible group-hover:visible flex-shrink-0" />
 
           {node.type === "NOTE" ? (
-            <FileText className="h-4 w-4 text-zinc-400 flex-shrink-0" />
+            <FileText className="mt-[2px] h-4 w-4 text-zinc-400 flex-shrink-0" />
           ) : node.type === "STACK" ? (
-            <Table2 className="h-4 w-4 text-indigo-400 flex-shrink-0" />
+            <Table2 className="mt-[2px] h-4 w-4 text-indigo-400 flex-shrink-0" />
           ) : node.type === "RECORDING" ? (
-            <Disc className="h-4 w-4 text-amber-400 flex-shrink-0" />
+            <Disc className="mt-[2px] h-4 w-4 text-amber-400 flex-shrink-0" />
           ) : (
-            <File className="h-4 w-4 text-sky-400 flex-shrink-0" />
+            <File className="mt-[2px] h-4 w-4 text-sky-400 flex-shrink-0" />
           )}
           
-          <span className="truncate flex-1 font-sans font-medium text-[14px]">
+          <span className="break-words whitespace-normal flex-1 font-sans font-medium text-[14px] leading-snug">
             {node.name}
           </span>
 
           {/* Hover Actions — opacity toggle avoids layout shift */}
-          <div className="flex items-center gap-0.5 ml-auto pl-1 z-10 bg-[#131313] rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
+          <div className="mt-[1px] flex items-center gap-0.5 ml-auto pl-1 z-10 bg-[#131313] rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none group-hover:pointer-events-auto">
             <button
               title="Delete"
               onClick={handleDeleteFile}
@@ -715,8 +727,10 @@ function ExplorerTree({ searchQuery, sortMethod, actions }: { searchQuery: strin
       } else if (item.type === "FILE") {
         useWorkspaceStore.getState().moveFileRecord(item.id, null);
         toast.success("File moved to root");
+      } else if (item.type === "RECORDING") {
+        useWorkspaceStore.getState().moveRecording(item.id, null);
+        toast.success("Recording moved to root");
       }
-      // RECORDING: already at root, no-op
     },
     collect: (monitor) => ({
       isOverRoot: monitor.isOver({ shallow: true }),
@@ -751,7 +765,7 @@ function ExplorerTree({ searchQuery, sortMethod, actions }: { searchQuery: strin
   return (
     <div 
       ref={dropRoot as any}
-      className={`flex-1 overflow-auto p-2 space-y-0.5 scrollbar-thin scrollbar-thumb-zinc-800 relative min-h-[250px] ${
+      className={`flex-1 overflow-auto p-2 space-y-0.5 scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent relative min-h-[250px] ${
         isOverRoot ? "bg-white/5 border border-dashed border-[#10B981] rounded-none" : ""
       } ${isRootFileDragOver ? "ring-2 ring-[#10B981] bg-[#10B9810D]" : ""}`}
       onDragOver={handleRootDragOver}
@@ -780,6 +794,8 @@ function ExplorerTree({ searchQuery, sortMethod, actions }: { searchQuery: strin
 export default function Sidebar() {
   const router = useRouter();
   const [isExplorerOpen, setIsExplorerOpen] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(288);
+  const [isResizing, setIsResizing] = useState(false);
   const [showStackDialog, setShowStackDialog] = useState(false);
   const [creatingStack, setCreatingStack] = useState(false);
   const [stackName, setStackName] = useState("");
@@ -856,6 +872,38 @@ export default function Sidebar() {
     setMounted(true);
   }, [fetchNotes, fetchStacks, fetchFolders, fetchRecordings, fetchFileRecords]);
 
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback(
+    (e: MouseEvent) => {
+      if (isResizing) {
+        const newWidth = e.clientX - 48; // 48px is the width of the left ribbon
+        if (newWidth >= 200 && newWidth <= 800) {
+          setSidebarWidth(newWidth);
+        }
+      }
+    },
+    [isResizing]
+  );
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener("mousemove", resize);
+      window.addEventListener("mouseup", stopResizing);
+    }
+    return () => {
+      window.removeEventListener("mousemove", resize);
+      window.removeEventListener("mouseup", stopResizing);
+    };
+  }, [isResizing, resize, stopResizing]);
+
   const createNoteInFolder = useCallback(async (folderId: string | null = null) => {
     try {
       const { tempId, promise } = optimisticCreateNote("Untitled Note", folderId);
@@ -930,13 +978,19 @@ export default function Sidebar() {
       const nextFolders = folders.filter((f) => !folderIdsToDelete.includes(f.id));
       const nextNotes = notes.filter((n) => !n.folderId || !folderIdsToDelete.includes(n.folderId));
       const nextStacks = stacks.filter((s) => !s.folderId || !folderIdsToDelete.includes(s.folderId));
-      const nextRecordings = snapshot.recordings; // Recordings have no folderId, unaffected
+      const nextRecordings = snapshot.recordings.map((r) =>
+        r.folderId && folderIdsToDelete.includes(r.folderId) ? { ...r, folderId: null } : r
+      );
+      const nextFileRecords = snapshot.fileRecords.map((fr) =>
+        fr.folderId && folderIdsToDelete.includes(fr.folderId) ? { ...fr, folderId: null } : fr
+      );
       
       useWorkspaceStore.setState({
         folders: nextFolders,
         notes: nextNotes,
         stacks: nextStacks,
         recordings: nextRecordings,
+        fileRecords: nextFileRecords,
         syncState: "SAVING",
         isSaving: true,
       });
@@ -950,6 +1004,8 @@ export default function Sidebar() {
           folders: snapshot.folders,
           notes: snapshot.notes,
           stacks: snapshot.stacks,
+          recordings: snapshot.recordings,
+          fileRecords: snapshot.fileRecords,
           syncState: "ERROR",
           isSaving: false,
         });
@@ -1107,7 +1163,15 @@ export default function Sidebar() {
 
       {/* Level 2: Unified Explorer */}
       {isExplorerOpen && (
-        <div className="w-72 bg-[#0E0E0E] border-r border-[#27272A] flex flex-col h-full relative flex-shrink-0 z-10">
+        <div 
+          className="bg-[#0E0E0E] border-r border-[#27272A] flex flex-col h-full relative flex-shrink-0 z-10"
+          style={{ width: sidebarWidth }}
+        >
+          {/* Resize Handle */}
+          <div
+            className={`absolute top-0 -right-[3px] w-[6px] h-full cursor-col-resize z-20 transition-colors ${isResizing ? "bg-[#10B981]" : "bg-transparent hover:bg-[#10B981]/50"}`}
+            onMouseDown={startResizing}
+          />
           <div className="p-3 border-b border-[#27272A] space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-xs font-semibold tracking-tighter text-white uppercase font-technical">Explorer</h2>
@@ -1177,7 +1241,7 @@ export default function Sidebar() {
           {mounted ? (
             <ExplorerTree searchQuery={searchQuery} sortMethod={sortMethod} actions={treeActions} />
           ) : (
-            <div className="flex-1 overflow-auto p-2 space-y-2 scrollbar-thin scrollbar-thumb-zinc-800">
+            <div className="flex-1 overflow-auto p-2 space-y-2 scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
               <div className="flex justify-center items-center h-32 text-zinc-500">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>

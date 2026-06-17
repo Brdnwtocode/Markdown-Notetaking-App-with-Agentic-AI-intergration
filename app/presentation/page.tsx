@@ -472,7 +472,7 @@ export default function PresentationPage() {
             </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
             {filteredPoolSlides.map((slide) => {
               const slideIndex = poolSlides.indexOf(slide);
               const isActive = displaySlides.includes(slideIndex);
@@ -517,7 +517,7 @@ export default function PresentationPage() {
         </aside>
 
         {/* PANEL 2: MAIN VIEW (Slide Presentation Screen) */}
-        <main className="flex-1 flex flex-col bg-[#050505] p-6 overflow-y-auto overflow-x-hidden min-w-[500px]">
+        <main className="flex-1 flex flex-col bg-[#050505] p-6 overflow-y-auto overflow-x-hidden min-w-[500px] scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
           {displaySlides.length > 0 ? (
             <div className="flex-1 flex flex-col justify-between max-w-5xl w-full mx-auto space-y-6">
               
@@ -1625,7 +1625,7 @@ Choose a task...
                                 <span>Refinement Count: {reflexionLoopCount} / 3</span>
                                 <span>Score: <strong className={reflexionScore >= 0.8 ? "text-[#10B981]" : "text-amber-500"}>{reflexionScore}</strong></span>
                               </div>
-                              <div className="h-28 overflow-y-auto border border-neutral-900 bg-neutral-900/30 p-2.5 text-neutral-400 font-mono text-[9.5px] leading-relaxed space-y-1">
+                              <div className="h-28 overflow-y-auto border border-neutral-900 bg-neutral-900/30 p-2.5 text-neutral-400 font-mono text-[9.5px] leading-relaxed space-y-1 scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
                                 {reflexionLogs.map((log, i) => (
                                   <div key={i} className={i === reflexionLogs.length - 1 ? "text-white" : ""}>{log}</div>
                                 ))}
@@ -1915,7 +1915,7 @@ Choose a task...
             </div>
           </div>
 
-          <div className="flex-grow overflow-y-auto p-3 space-y-2">
+          <div className="flex-grow overflow-y-auto p-3 space-y-2 scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
             {displaySlides.map((slideIdx, index) => {
               const slide = poolSlides[slideIdx];
               const isSelected = currentDisplayIndex === index;

@@ -28,13 +28,33 @@ export type ContinuousSTTStatus =
   | "fallback"
   | "error";
 
+/**
+ * Build the language query-string fragment for the Deepgram WS URL.
+ * - Single language → `&language=vi` (lock to one language, best accuracy)
+ * - Multiple or none  → empty string (let nova-3 auto-detect, default behaviour)
+ * Returns the fragment including a leading '&', or empty string.
+ */
+function buildLanguageParam(lang: string | string[]): string {
+  const codes = Array.isArray(lang) ? lang : lang.split(",").map((s) => s.trim()).filter(Boolean);
+  // Single explicit language → lock it for accuracy
+  if (codes.length === 1) return `&language=${codes[0]}`;
+  // Multiple or none → let Deepgram auto-detect (nova-3 default)
+  return "";
+}
+
 export interface ContinuousSTTOptions {
   onInterimTranscript?: (text: string) => void;
   onFinalizedSegment?: (text: string) => void;
   onTranscriptComplete?: (fullTranscript: string) => void;
   onStatusChange?: (status: ContinuousSTTStatus) => void;
-  /** BCP-47 language tag. Defaults to "en" (English). */
-  language?: string;
+  /**
+   * BCP-47 language tag(s). Supports a single code ("en"), comma-separated
+   * list ("vi,en"), or an array (["vi","en"]).
+   * - Single language: passed as `&language=X` for best accuracy.
+   * - Multiple/none: omitted entirely — nova-3 auto-detects by default.
+   * Defaults to ["vi","en"] (auto-detect).
+   */
+  language?: string | string[];
   /** Deepgram model. Defaults to "nova-3". */
   model?: string;
 }
@@ -46,9 +66,12 @@ export function useContinuousSTT({
   onFinalizedSegment,
   onTranscriptComplete,
   onStatusChange,
-  language = "en",
+  language = ["vi", "en"],
   model = "nova-3",
 }: ContinuousSTTOptions = {}) {
+  // Normalize language early so the URL fragment stays stable across renders
+  const languageParam = buildLanguageParam(language);
+
   const [status, setStatus] = useState<ContinuousSTTStatus>("idle");
 
   // Refs — all mutable runtime state lives here to avoid stale closures
@@ -117,6 +140,7 @@ export function useContinuousSTT({
         throw new Error(errBody.error || `Deepgram token failed (HTTP ${tokenRes.status})`);
       }
       const { token } = await tokenRes.json();
+      console.log("[ContinuousSTT] Token received, length:", token?.length ?? 0, "preview:", token?.slice(0, 8) + "...");
 
       // 2. Acquire mic
       setStatusBoth("connecting");
@@ -129,6 +153,7 @@ export function useContinuousSTT({
         },
       });
       mediaStreamRef.current = stream;
+      console.log("[ContinuousSTT] Mic acquired");
 
       // 3. Start MediaRecorder (fallback — stores blobs for later upload)
       const recorder = new MediaRecorder(stream, {
@@ -142,11 +167,13 @@ export function useContinuousSTT({
         if (e.data.size > 0) blobsRef.current.push(e.data);
       };
       recorder.start(1000);
+      console.log("[ContinuousSTT] MediaRecorder started");
 
       // 4. Open Deepgram WebSocket
       //    encoding=linear16 matches the raw PCM Int16 we send via ScriptProcessor
-      const url = `wss://api.deepgram.com/v1/listen?model=${model}&language=${language}&interim_results=true&encoding=linear16&sample_rate=16000&channels=1`;
+      const url = `wss://api.deepgram.com/v1/listen?model=${model}${languageParam}&interim_results=true&encoding=linear16&sample_rate=16000&channels=1`;
       console.log("[ContinuousSTT] Connecting:", url);
+      console.log("[ContinuousSTT] languageParam:", JSON.stringify(languageParam), "model:", model);
 
       const ws = new WebSocket(url, ["token", token]);
       wsRef.current = ws;
@@ -234,7 +261,7 @@ export function useContinuousSTT({
       // Re-throw so the caller (BackgroundRecorder) can fall back or reset state
       throw err;
     }
-  }, [setStatusBoth, language, model, onInterimTranscript, onFinalizedSegment, cleanup]);
+  }, [setStatusBoth, languageParam, model, onInterimTranscript, onFinalizedSegment, cleanup]);
 
   // ─── Pause / Resume ────────────────────────────────────────────────────────
 

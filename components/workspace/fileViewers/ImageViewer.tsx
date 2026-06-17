@@ -5,6 +5,7 @@
 // Inline image viewer using a presigned URL.
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import axios from "axios";
 import { useWorkspaceStore } from "@/lib/store";
 import { Loader2, ZoomIn, ZoomOut, Download } from "lucide-react";
@@ -49,7 +50,7 @@ export default function ImageViewer({ fileId, fileName }: ImageViewerProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, [fileId]);
+  }, [fileId, fileContentCache, cacheFileContent]);
 
   if (loading) {
     return (
@@ -103,11 +104,14 @@ export default function ImageViewer({ fileId, fileName }: ImageViewerProps) {
 
       {/* Image */}
       <div className="flex-1 overflow-auto flex items-start justify-center bg-[#0A0A0A] p-4 scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
-        <img
+        <Image
           src={url}
           alt={fileName}
+          width={1200}
+          height={800}
           style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}
-          className="max-w-full transition-transform duration-150"
+          className="max-w-full h-auto transition-transform duration-150"
+          unoptimized
         />
       </div>
     </div>

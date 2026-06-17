@@ -59,7 +59,7 @@ export default function TextViewer({ fileId, fileName }: TextViewerProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, [fileId]);
+  }, [fileId, fileContentCache, cacheFileContent]);
 
   const isDirty = content !== originalContent;
 
@@ -84,7 +84,7 @@ export default function TextViewer({ fileId, fileName }: TextViewerProps) {
     } finally {
       setSaving(false);
     }
-  }, [fileId]);
+  }, [fileId, cacheFileContent]);
 
   // Ctrl+S save
   useEffect(() => {

@@ -671,7 +671,7 @@ const DiffOverlay = ({ originalContent, newContent }: DiffOverlayProps) => {
   }
 
   return (
-    <div className="absolute inset-0 bg-[#0E0E0E]/95 overflow-y-auto px-4 py-3 z-10 font-sans select-text">
+    <div className="absolute inset-0 bg-[#0E0E0E]/95 overflow-y-auto px-4 py-3 z-10 font-sans select-text scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
       {/* Summary header */}
       <div className="sticky top-0 bg-[#131313] border border-[#10B981]/30 px-3 py-2 mb-3 flex items-center gap-3 text-xs z-20">
         <span className="relative flex h-2 w-2">

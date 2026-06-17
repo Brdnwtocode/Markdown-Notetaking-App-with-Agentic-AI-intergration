@@ -59,7 +59,7 @@ export default function CsvViewer({ fileId, onConvert }: CsvViewerProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, [fileId]);
+  }, [fileId, fileContentCache, cacheFileContent]);
 
   const isDirty = content !== originalContent;
 
@@ -103,7 +103,7 @@ export default function CsvViewer({ fileId, onConvert }: CsvViewerProps) {
     } finally {
       setSaving(false);
     }
-  }, [fileId]);
+  }, [fileId, cacheFileContent]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

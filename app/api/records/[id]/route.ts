@@ -65,6 +65,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       audioKey: body.audioKey,
       audioSizeBytes: body.audioSizeBytes,
       errorLog: body.errorLog,
+      folderId: body.folderId,
       noteMutation: body.noteMutation,
       taskMutations: body.taskMutations,
       stackMutation: body.stackMutation,
@@ -96,13 +97,26 @@ export async function DELETE(_req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Delete from S3 if audio was stored
+  // Delete audio from S3 if stored
   if (existing.audioKey) {
     try {
       await deleteFile(existing.audioKey);
     } catch (err) {
-      console.error("[records] Failed to delete S3 file:", err);
+      console.error("[records] Failed to delete S3 audio file:", err);
       // Continue with DB deletion anyway
+    }
+  }
+
+  // Delete attachment files from S3 before cascade-deleting the DB rows
+  const attachments = await prisma.attachment.findMany({
+    where: { recordingId: params.id },
+    select: { storageKey: true },
+  });
+  for (const att of attachments) {
+    try {
+      await deleteFile(att.storageKey);
+    } catch (err) {
+      console.error("[records] Failed to delete S3 attachment:", att.storageKey, err);
     }
   }
 

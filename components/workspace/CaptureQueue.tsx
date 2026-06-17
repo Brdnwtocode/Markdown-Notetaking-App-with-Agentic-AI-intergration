@@ -15,14 +15,16 @@
 //   Accepted: .wav, .mp3, .webm, .ogg, .m4a, .flac, .aac
 //   Max size: 500 MB
 
-import { useCallback, useState, useRef } from "react";
+import { useCallback, useState, useRef, useMemo } from "react";
 import { useWorkspaceStore } from "@/lib/store";
 import type { Recording, RecordStatus, LocalRecording } from "@/lib/slices/recordsSlice";
 import {
   Circle, CheckCircle2, Loader2, FileAudio,
   Trash2, Upload, Save, Pencil, Check, X, Play,
+  Search, ArrowUpDown,
 } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { fmtDuration } from "@/lib/utils";
 
 // ─── Accepted audio types ─────────────────────────────────────────────────
 const ACCEPTED_EXTENSIONS = [
@@ -95,6 +97,59 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
   const savingRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+
+  // ─── Search & Sort ──────────────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "title-asc" | "title-desc" | "duration-asc" | "duration-desc">("newest");
+  const [sortOpen, setSortOpen] = useState(false);
+
+  const sortOptions: { value: typeof sortBy; label: string }[] = [
+    { value: "newest", label: "Newest First" },
+    { value: "oldest", label: "Oldest First" },
+    { value: "title-asc", label: "Title A → Z" },
+    { value: "title-desc", label: "Title Z → A" },
+    { value: "duration-asc", label: "Duration ↑" },
+    { value: "duration-desc", label: "Duration ↓" },
+  ];
+
+  const sortLabel = sortOptions.find((o) => o.value === sortBy)?.label ?? "Sort";
+
+  // ─── Filter & sort recordings ──────────────────────────────────────────
+  const filteredRecordings = useMemo(() => {
+    let list = [...recordings];
+    const q = searchQuery.toLowerCase().trim();
+    if (q) {
+      list = list.filter((r) => r.title.toLowerCase().includes(q));
+    }
+    switch (sortBy) {
+      case "oldest": list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); break;
+      case "title-asc": list.sort((a, b) => a.title.localeCompare(b.title)); break;
+      case "title-desc": list.sort((a, b) => b.title.localeCompare(a.title)); break;
+      case "duration-asc": list.sort((a, b) => a.durationSec - b.durationSec); break;
+      case "duration-desc": list.sort((a, b) => b.durationSec - a.durationSec); break;
+      case "newest":
+      default: list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); break;
+    }
+    return list;
+  }, [recordings, searchQuery, sortBy]);
+
+  const filteredLocalRecordings = useMemo(() => {
+    let list = [...localRecordings];
+    const q = searchQuery.toLowerCase().trim();
+    if (q) {
+      list = list.filter((r) => r.title.toLowerCase().includes(q));
+    }
+    switch (sortBy) {
+      case "oldest": list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()); break;
+      case "title-asc": list.sort((a, b) => a.title.localeCompare(b.title)); break;
+      case "title-desc": list.sort((a, b) => b.title.localeCompare(a.title)); break;
+      case "duration-asc": list.sort((a, b) => a.durationSec - b.durationSec); break;
+      case "duration-desc": list.sort((a, b) => b.durationSec - a.durationSec); break;
+      case "newest":
+      default: list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()); break;
+    }
+    return list;
+  }, [localRecordings, searchQuery, sortBy]);
 
   // ─── Process dropped/selected files ────────────────────────────────────
   const processFiles = useCallback(
@@ -293,12 +348,58 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
     );
   };
 
-  const hasItems = recordings.length > 0 || localRecordings.length > 0;
+  const hasItems = filteredRecordings.length > 0 || filteredLocalRecordings.length > 0;
+  const totalFiltered = filteredRecordings.length + filteredLocalRecordings.length;
+  const totalAll = recordings.length + localRecordings.length;
 
   // ─── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto">
+      {/* ─── Search & Sort Bar ────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-[#27272A] bg-[#0A0A0A]/30">
+        <div className="relative flex-1">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-zinc-600" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search recordings…"
+            className="w-full pl-7 pr-2 py-1.5 bg-[#0E0E0E] border border-[#27272A] rounded-sm text-[10px] font-mono text-zinc-300 placeholder:text-zinc-700 outline-none focus:border-[#10B981]/50 transition-colors"
+          />
+        </div>
+        <div className="relative">
+          <button
+            onClick={() => setSortOpen(!sortOpen)}
+            className={`flex items-center gap-1 px-2 py-1.5 rounded-sm border text-[10px] font-mono transition-colors ${sortBy !== "newest" ? "border-[#10B981]/30 text-[#10B981] bg-[#10B981]/5" : "border-[#27272A] text-zinc-500 hover:border-zinc-500 hover:text-zinc-300"}`}
+          >
+            <ArrowUpDown className="h-2.5 w-2.5" />
+            {sortLabel}
+          </button>
+          {sortOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
+              <div className="absolute right-0 top-full mt-1 w-40 bg-[#131313] border border-[#27272A] rounded-sm shadow-lg z-20 overflow-hidden">
+                {sortOptions.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => { setSortBy(opt.value); setSortOpen(false); }}
+                    className={`w-full text-left px-3 py-1.5 text-[10px] font-mono transition-colors ${sortBy === opt.value ? "text-[#10B981] bg-[#10B981]/10" : "text-zinc-400 hover:bg-[#1A1A1A] hover:text-zinc-200"}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+        {searchQuery && (
+          <span className="text-[9px] font-mono text-zinc-600">
+            {totalFiltered}/{totalAll}
+          </span>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
         {recordingsLoading ? (
           <div className="flex items-center justify-center py-12"><Loader2 className="h-5 w-5 text-[#10B981] animate-spin" /></div>
         ) : !hasItems ? (
@@ -319,7 +420,7 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
             </thead>
             <tbody>
               {/* ─── Persisted recordings ──────────────────────────────── */}
-              {recordings.map((rec) => {
+              {filteredRecordings.map((rec) => {
                 const isActive = rec.id === activeId;
                 const isRenaming = renamingId === rec.id;
                 return (
@@ -368,7 +469,7 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
               })}
 
               {/* ─── Local (unsaved) recordings ────────────────────────── */}
-              {localRecordings.map((loc) => {
+              {filteredLocalRecordings.map((loc) => {
                 const isActive = loc.id === activeId;
                 const isRenaming = renamingId === loc.id;
                 return (
@@ -449,9 +550,4 @@ export default function CaptureQueue({ onSelect, onSelectLocal, activeId }: Capt
   );
 }
 
-function fmtDuration(sec: number): string {
-  if (!sec || sec <= 0) return "--:--";
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
+

@@ -124,7 +124,6 @@ export default function PushToTalk() {
   // ─── STT hook ──────────────────────────────────────────────────────
 
   const { status, start, stop } = useDeepgramSTT({
-    language: "vi",
     model: "nova-3",
     onInterimTranscript: (text) => {
       setRecordingTranscript(text);
@@ -211,12 +210,21 @@ export default function PushToTalk() {
 
   const isIdle = status === "idle";
 
+  // Clear floating transcript when STT returns to idle
+  useEffect(() => {
+    if (status === "idle" && recordingTranscript) {
+      // Small delay so the user sees the final transcript briefly before it fades
+      const timer = setTimeout(() => setRecordingTranscript(""), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [status, recordingTranscript, setRecordingTranscript]);
+
   // ─── Render ────────────────────────────────────────────────────────
 
   return (
     <div className="fixed bottom-6 right-6 group flex flex-col items-center gap-3 z-50">
-      {/* Transcript / Status bubble */}
-      {(isActive || recordingTranscript) && (
+      {/* Transcript / Status bubble — only visible while actively recording/processing */}
+      {isActive && (
         <div className="flex flex-col items-center gap-2.5 glass-card text-white text-xs font-medium px-4 py-3.5 shadow-2xl rounded-2xl pointer-events-none select-none transition-all duration-300 max-w-[320px] w-max border-white/10 glow-emerald-subtle">
           {isProcessing ? (
             <div className="flex items-center gap-2 text-[#10B981]">

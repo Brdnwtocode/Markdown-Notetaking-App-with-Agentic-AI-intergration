@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { title, transcript, durationSec, audioKey, audioSizeBytes } = body;
+  const { title, transcript, durationSec, audioKey, audioSizeBytes, folderId } = body;
 
   const recording = await prisma.recording.create({
     data: {
@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
       status: "COMMITTED",
       audioKey: audioKey || null,
       audioSizeBytes: audioSizeBytes || null,
+      folderId: folderId || null,
     },
     include: { attachments: true },
   });

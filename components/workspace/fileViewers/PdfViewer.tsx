@@ -44,7 +44,7 @@ export default function PdfViewer({ fileId, fileName }: PdfViewerProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, [fileId]);
+  }, [fileId, fileContentCache, cacheFileContent]);
 
   if (loading) {
     return (

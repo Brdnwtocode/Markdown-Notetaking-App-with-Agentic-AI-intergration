@@ -236,7 +236,7 @@ export default function EventDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-[#131313] border border-[#27272A] p-6 text-white rounded-none shadow-2xl">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-[#131313] border border-[#27272A] p-6 text-white rounded-none shadow-2xl scrollbar-thin scrollbar-thumb-zinc-800 hover:scrollbar-thumb-zinc-700 scrollbar-track-transparent">
         <DialogTitle className="sr-only">{event ? "Edit Event" : "New Event"}</DialogTitle>
         
         {/* Header */}
