@@ -106,6 +106,11 @@ function handleDataAction(
       toast.persistent(`AI suggested a new note: "${updatedData?.title || "Untitled"}" — review and accept`);
       return `AI suggested a new note: "${updatedData?.title || "Untitled"}".\n\nReview and click **Accept** to save or **Discard** to revert.`;
 
+    case "create_stack":
+      store.stageMutation({ type: "create_stack", data: updatedData });
+      toast.persistent(`AI suggested a new stack: "${updatedData?.title || "Untitled"}" — review and accept`);
+      return `AI suggested a new stack: "${updatedData?.title || "Untitled"}".\n\nReview and click **Accept** to save or **Discard** to revert.`;
+
     case "create_calendar_event":
       store.stageMutation({ type: "create_calendar_event", data: updatedData });
       toast.persistent(`AI suggested a calendar event: "${updatedData?.title || "Untitled"}" — review and accept`);

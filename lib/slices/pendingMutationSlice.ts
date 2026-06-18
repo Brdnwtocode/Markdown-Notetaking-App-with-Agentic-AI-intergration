@@ -72,6 +72,15 @@ export type PendingMutation = {
     folderId?: string | null;
   };
 } | {
+  /** Create a brand-new stack with columns from AI suggestion */
+  type: "create_stack";
+  data: {
+    title: string;
+    columns: Array<{ id: string; name: string; type: "TEXT" | "INT" | "FLOAT" | "BOOLEAN" }>;
+    initial_rows?: Array<Record<string, any>>;
+    folderId?: string | null;
+  };
+} | {
   /**
    * Bundled results from Agentic Automate (full_automate action).
    * Carries note + tasks + calendar mutations in a single staging slot
@@ -278,6 +287,20 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         const created = res.data;
         get().addNote(created);
         toast.success(`Note "${d.title}" created`);
+      } else if (pendingMutation?.type === "create_stack") {
+        const d = pendingMutation.data;
+        if (!d.title?.trim()) throw new Error("Stack name is required");
+        const res = await apiClient.post("/api/stacks", {
+          name: d.title.trim(),
+          columns: (d.columns ?? []).map((col) => ({
+            name: col.name,
+            type: col.type,
+          })),
+          folderId: d.folderId ?? null,
+        });
+        const created = res.data;
+        get().addStack(created);
+        toast.success(`Stack "${d.title}" created`);
       } else if (pendingMutation?.type === "automate_results") {
         // Process bundled Agentic Automate results atomically
         const { noteMutation, taskMutations, calendarMutation } = pendingMutation;
@@ -337,14 +360,14 @@ export const createPendingMutationSlice: StateCreator<RootStore, [], [], Pending
         toast(pendingMutation.message, { icon: "💡" });
       }
       
-      const undoableTypes = ["update_note", "create_task", "add_stack_row", "create_calendar_event", "create_note", "automate_results"];
+      const undoableTypes = ["update_note", "create_task", "add_stack_row", "create_calendar_event", "create_note", "create_stack", "automate_results"];
       const shouldSaveHistory = pendingMutation && undoableTypes.includes(pendingMutation.type);
       set({
         pendingMutation: null,
         mutationStatus: "IDLE",
         ...(shouldSaveHistory ? { lastConfirmedMutation: pendingMutation } : {}),
       });
-      if (pendingMutation?.type !== "summarize_context" && pendingMutation?.type !== "none" && pendingMutation?.type !== "create_note" && pendingMutation?.type !== "automate_results") {
+      if (pendingMutation?.type !== "summarize_context" && pendingMutation?.type !== "none" && pendingMutation?.type !== "create_note" && pendingMutation?.type !== "create_stack" && pendingMutation?.type !== "automate_results") {
         toast.success("Changes confirmed and saved!");
       }
     } catch (error) {
