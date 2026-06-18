@@ -5,6 +5,7 @@
 
 import { useWorkspaceStore } from "@/lib/store";
 import type { VoiceResponse } from "@/types/voice";
+import { toast } from "@/lib/toast";
 
 export interface ActionContext {
   currentNoteId: string | null;
@@ -80,6 +81,7 @@ function handleDataAction(
         originalContent: ctx.noteCache[noteId]?.content || ctx.originalContent || "",
         diff,
       });
+      toast.persistent(`AI suggestion ready in "${noteTitle}" — press Tab to accept`);
       return `AI suggests: "${diff.content_to_insert}"\n\nPress **Tab** to accept or **Esc** to dismiss.`;
     }
 
@@ -90,15 +92,18 @@ function handleDataAction(
       const stackName = stack?.name || "Stack";
       store.openTab(stackId, "STACK", stackName);
       store.stageMutation({ type: "add_stack_row", stackId, data: updatedData });
+      toast.persistent(`AI suggested a new row in "${stackName}" — review and accept`);
       return `AI suggested a new row in "${stackName}".\n\nReview the highlighted ghost row and click **Accept** to save or **Discard** to revert.`;
     }
 
     case "create_task":
       store.stageMutation({ type: "create_task", data: updatedData });
+      toast.persistent(`AI suggested a new task: "${updatedData?.title || "Untitled"}" — review and accept`);
       return `AI suggested a new task: "${updatedData?.title || "Untitled"}".\n\nReview and click **Accept** to save or **Discard** to revert.`;
 
     case "create_calendar_event":
       store.stageMutation({ type: "create_calendar_event", data: updatedData });
+      toast.persistent(`AI suggested a calendar event: "${updatedData?.title || "Untitled"}" — review and accept`);
       return `AI suggested a new calendar event: "${updatedData?.title || "Untitled"}".\n\nReview and click **Accept** to save or **Discard** to revert.`;
 
     case "bulk_update_stack": {
@@ -108,11 +113,13 @@ function handleDataAction(
       const stackName = stack?.name || "Stack";
       store.openTab(stackId, "STACK", stackName);
       store.stageMutation({ type: "bulk_update_stack", stackId, updates: updatedData.updates });
+      toast.persistent(`AI suggested updates to ${updatedData.updates.length} row(s) in "${stackName}" — review and accept`);
       return `AI suggested bulk updates to ${updatedData.updates.length} row(s) in "${stackName}".\n\nReview and click **Accept** to save or **Discard** to revert.`;
     }
 
     case "manage_tasks":
       store.stageMutation({ type: "manage_tasks", action: updatedData?.action || "create", data: updatedData });
+      toast.persistent(`AI suggested a task ${updatedData?.action || "update"} — review and accept`);
       return `AI suggested a task ${updatedData?.action || "update"}.\n\nReview and click **Accept** to save or **Discard** to revert.`;
 
     default:

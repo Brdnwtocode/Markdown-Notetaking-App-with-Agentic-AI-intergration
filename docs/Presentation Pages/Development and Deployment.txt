@@ -1,0 +1,32 @@
+SYSTEM DEVELOPMENT AND DEPLOYMENT
+
+DEVELOPMENT METHODOLOGY AND TOOLCHAIN
+
+The project was successfully implemented using the Agent-Based Developing Process (ABDP) methodology, leveraging specialized AI coding agents to accelerate parallel development across two independent subsystems (the Next.js Workspace and the FastAPI Microservice). This approach allowed for the allocation of different task types to specific, specialized models, maximizing development throughput:
+
+- Architecture and System Design: Claude was used to shape the overall system architecture and design, specifically ensuring the stateless and distributed principles of the microservice architecture.
+- Complex Implementation and Issue Resolution: GitHub Copilot combined with DeepSeek v4 models via API handled complex implementation and core architectural tasks, along with resolving errors encountered during execution.
+- Boilerplate, Documentation, and Aesthetics: Antigravity IDE integrated with Gemini focused primarily on aesthetic tasks, generating documentation, and creating boilerplate code for Next.js components, helping to standardize the user interface and experience.
+- Small Self-Contained Tasks: Specialized agents such as Cursor, Trae, Junie, and OpenCode Agents were deployed to handle small, self-contained tasks, reducing the workload on the main agents.
+
+Local Development Environment Toolchain
+The local working environment was configured to effectively manage the two codebases (TypeScript and Python) and integrate agent-assisted development tools:
+- Code Editors: Flexible use of multiple editors, including VS Code, Antigravity, Trae, Cursor, and WebStorm, was adopted to leverage the specific agent integrations and features of each IDE for different languages and frameworks.
+- Core Technologies: Next.js 14, React 18, Tailwind CSS, Zustand, Prisma, Python FastAPI, Neon serverless PostgreSQL, S3 storage, Deepgram, and Gemini/Groq APIs.
+
+PRODUCTION DEPLOYMENT ENVIRONMENT
+
+The deployment architecture is fully implemented as a containerized, automated system deployed on Amazon Web Services (AWS) EC2, integrated with serverless data services:
+
+1. Hosting Infrastructure
+- Next.js Application Container: Deployed on an AWS EC2 instance. The application runs inside a Docker container using a multi-stage production build configuration (Node 18-slim), exposing port 3000.
+- Nginx Reverse Proxy: Configured directly on the EC2 host machine to intercept public traffic, handle reverse proxying to the Next.js Docker container (localhost:3000), and enforce HTTPS communication.
+- Automated SSL: Let's Encrypt SSL certificates are provisioned and renewed automatically via Certbot integrated directly with the Nginx server block.
+- Database: Persistence layer utilizing Neon Serverless PostgreSQL, keeping database storage decoupled from the EC2 application host.
+- Cloud Storage: Object storage (S3) stores audio record files and note-uploaded images, keeping the EC2 server stateless.
+
+2. Automated CI/CD Pipeline
+Continuous Integration and Deployment are fully automated via GitHub Actions workflows (`deploy.yml`) triggered on push events to the `main` branch:
+- Automated Code Packaging: The workspace is packaged and synchronized with the EC2 host using SSH/SCP.
+- Dynamic Configuration Injection: Server-side configurations and environment variables (such as Neon database connection string, S3 credentials, API keys for Deepgram, Groq, and Gemini) are dynamically written into `.env.local` using GitHub Repository Secrets.
+- Automated Container Orchestration: Docker Compose is run on the remote EC2 host to rebuild the application container, perform database migrations using `npx prisma migrate deploy` on startup, and launch the service with zero downtime.

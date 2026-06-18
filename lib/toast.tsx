@@ -8,7 +8,11 @@ import { X } from "lucide-react";
  * Uses react-hot-toast's `custom()` under the hood so the toast can be
  * dismissed either by clicking the X button or by clicking anywhere on the toast.
  */
-function renderWithDismiss(message: string, type: "success" | "error") {
+function renderWithDismiss(
+  message: string,
+  type: "success" | "error",
+  opts?: { duration?: number }
+) {
   const accentColor = type === "success" ? "#10B981" : "#EF4444";
 
   return originalToast.custom(
@@ -42,7 +46,7 @@ function renderWithDismiss(message: string, type: "success" | "error") {
         </button>
       </div>
     ),
-    { duration: 6000 }
+    { duration: opts?.duration ?? 6000 }
   );
 }
 
@@ -67,6 +71,13 @@ export const toast = Object.assign(
   {
     success: (message: string) => renderWithDismiss(message, "success"),
     error: (message: string) => renderWithDismiss(message, "error"),
+    /**
+     * Persistent success toast — stays visible until the user explicitly
+     * dismisses it via the X button, Accept/Discard action, or click.
+     * Use this for AI suggestions and mutations that require user review.
+     */
+    persistent: (message: string) =>
+      renderWithDismiss(message, "success", { duration: Infinity }),
   }
 );
 
