@@ -10,6 +10,7 @@ import UniversalConfirmationToast from "@/components/workspace/UniversalConfirma
 import BackgroundRecorder from "@/components/workspace/BackgroundRecorder";
 import WorkspacePrefetcher from "@/components/workspace/WorkspacePrefetcher";
 import DndWrapper from "@/components/workspace/DndWrapper";
+import WorkspaceTutorial from "@/components/workspace/WorkspaceTutorial";
 
 export default async function WorkspaceLayout({
   children,
@@ -40,6 +41,7 @@ export default async function WorkspaceLayout({
           <UniversalConfirmationToast />
         </div>
         <ChatSidebar />
+        <WorkspaceTutorial />
       </div>
     </DndWrapper>
   );

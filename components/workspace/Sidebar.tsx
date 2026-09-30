@@ -872,6 +872,12 @@ export default function Sidebar() {
     setMounted(true);
   }, [fetchNotes, fetchStacks, fetchFolders, fetchRecordings, fetchFileRecords]);
 
+  useEffect(() => {
+    const openExplorer = () => setIsExplorerOpen(true);
+    window.addEventListener("lock-in:open-explorer", openExplorer);
+    return () => window.removeEventListener("lock-in:open-explorer", openExplorer);
+  }, []);
+
   const startResizing = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
